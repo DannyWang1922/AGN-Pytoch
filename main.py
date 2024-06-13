@@ -23,10 +23,10 @@ def set_seed(seed=42):
     torch.manual_seed(seed)  # PyTorch
 
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)  # 为所有 GPU 设置种子
-        torch.cuda.manual_seed_all(seed)  # 如果使用多个 GPU，为所有 GPU 设置种子
-        torch.backends.cudnn.deterministic = True  # 确保每次返回的卷积算法是确定的
-        torch.backends.cudnn.benchmark = False  # 如果输入数据维度或类型上变化不大，设置为 True 可以提高性能
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def check_device():
@@ -53,7 +53,7 @@ def main():
         config = json.load(reader)
     formatted_json = json.dumps(config, indent=4, sort_keys=True)  # json read friendly format
     print("Config:")
-    # print(formatted_json)
+    print(formatted_json)
     print()
 
     # create save_dir folder if not exists
@@ -84,7 +84,7 @@ def main():
     f1_list = []
     for idx in range(1, config['iterations'] + 1):
         print(f"Starting iteration {idx}")
-        train_dataset = AGNPaddedDataset(AGNDataloader.train_set[:300])
+        train_dataset = AGNPaddedDataset(AGNDataloader.train_set)
         train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
         val_dataset = AGNPaddedDataset(AGNDataloader.dev_set)
         val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
