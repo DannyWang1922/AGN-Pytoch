@@ -1,0 +1,17 @@
+{
+    "max_len": 128,
+    "ae_epochs": 100,
+    "ae_latent_dim": 1024,
+    "epochs": 10,
+    "batch_size": 128,
+    "learning_rate": 0.00002,
+    "pretrained_model_dir": "pretrained_bert",
+    "train_path": "data/sst2/train.json",
+    "dev_path": "data/sst2/dev.json",
+    "save_dir": "ckpts/sst2",
+    "hidden_size": 256,
+    "dropout_rate": 0.1,
+    "iterations": 1,
+    "verbose": 1,
+    "optimizer": "adamw"
+}
