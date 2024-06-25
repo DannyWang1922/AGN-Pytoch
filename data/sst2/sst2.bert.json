@@ -1,7 +1,7 @@
 {
     "dataset_name": "sst2",
     "max_len": 128,
-    "ae_epochs": 1,
+    "ae_epochs": 20,
     "ae_latent_dim": 1024,
     "epochs": 10,
     "batch_size": 256,

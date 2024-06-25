@@ -40,7 +40,7 @@ class ClfMetrics:
         f1 = f1_score(y_true, y_pred, average='macro')
         return acc, f1
 
-    def on_epoch_end(self, epoch, avg_loss, logs=None):
+    def on_epoch_end(self, epoch, avg_loss):
         val_acc, val_f1 = self.calc_metrics()
         self.history['val_acc'].append(val_acc)
         self.history['val_f1'].append(val_f1)
@@ -55,3 +55,11 @@ class ClfMetrics:
             if self.wait >= self.patience:
                 self.model.stop_training = True
                 print(f'Epoch {epoch + 1}: Early stopping')
+
+
+
+
+
+
+
+

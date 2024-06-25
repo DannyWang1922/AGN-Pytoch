@@ -1,7 +1,7 @@
 {
     "dataset_name": "sst2",
     "max_len": 128,
-    "ae_epochs": 1,
+    "ae_epochs": 20,
     "ae_latent_dim": 1024,
     "epochs": 10,
     "batch_size": 256,
@@ -15,6 +15,7 @@
     "iterations": 1,
     "verbose": 1,
     "optimizer": "adamw",
+    "valve_rate": 0.4,
     "use_dynamic_valve": false,
     "use_vae": true,
     "use_agn": true

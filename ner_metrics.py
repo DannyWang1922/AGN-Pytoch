@@ -66,9 +66,6 @@ class NerMetrics:
             self.wait += 1
             if self.wait >= self.patience:
                 self.stopped_epoch = epoch
-                return True  # Signal to stop training
-        return False
+                self.model.stop_training = True
+                print(f'Epoch {epoch + 1}: Early stopping')
 
-    def on_train_end(self):
-        if self.stopped_epoch > 0:
-            print(f'Epoch {self.stopped_epoch + 1:05d}: early stopping')
