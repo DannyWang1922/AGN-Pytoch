@@ -88,7 +88,7 @@ class VariationalAutoencoder(nn.Module):
                 loss.backward()
                 optimizer.step()
             print(f"\tEpoch {epoch + 1}, Loss: {loss.item()}")
-        print("Encoder training finish.")
+        print("VAE Encoder training finish.")
         print()
 
     def predict(self, data, batch_size, device):
@@ -132,44 +132,5 @@ class Autoencoder(nn.Module):
                 loss.backward()
                 optimizer.step()
             print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
-
-
-class DataGenerator:
-    def __init__(self, batch_size):
-        self.batch_size = batch_size
-        self.train_set = None
-        self.train_size = None
-        self.train_steps = None
-
-    def set_dataset(self, train_set):
-        self.train_set = train_set
-        self.train_size = len(self.train_set)
-        self.train_steps = len(self.train_set) // self.batch_size
-        if self.train_size % self.batch_size != 0:
-            self.train_steps += 1
-
-    def __iter__(self, shuffle=True):
-        while True:
-            idxs = list(range(self.train_size))
-            if shuffle:
-                np.random.shuffle(idxs)
-            batch_token_ids, batch_segment_ids, batch_tcol, batch_label_ids = [], [], [], []
-            for idx in idxs:
-                d = self.train_set[idx]
-                batch_token_ids.append(d['token_ids'])
-                batch_segment_ids.append(d['segment_ids'])
-                batch_tcol.append(d['tcol_ids'])
-                batch_label_ids.append(d['label_id'])
-                if len(batch_token_ids) == self.batch_size or idx == idxs[-1]:
-                    batch_token_ids = pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
-                    batch_segment_ids = pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
-                    # batch_tcol = np.array(batch_tcol)
-                    # batch_label_ids = np.array(batch_label_ids)
-                    yield [batch_token_ids, batch_segment_ids, batch_tcol], batch_label_ids
-                    batch_token_ids, batch_segment_ids, batch_tcol, batch_label_ids = [], [], [], []
-
-    @property
-    def steps_per_epoch(self):
-        return self.train_steps
 
 

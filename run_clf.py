@@ -1,17 +1,10 @@
 import argparse
 import json
-
-import torch
 import numpy as np
 import random
-import os
 from transformers import BertTokenizer
-
-from AGNDataloader import AGNDataLoader
-from metrics import ClfMetrics
-from model import DataGenerator
-from AGN_model import AGNPaddedDataset, AGNModel, train_agn_model
-
+from cls_dataloader import ClfDataLoader, ClfPaddedDataset
+from model_AGN import AGNModel, train_agn_model
 import os
 import torch
 from torch.utils.data import DataLoader
@@ -43,18 +36,25 @@ def check_device():
     return device
 
 
-def main():
+def main(device):
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
-    parser.add_argument('--config', type=str, default="data/sst2/config.json")
+    parser.add_argument('--config', type=str, default="data/sst2/sst2.json")
     args = parser.parse_args()
-
     config_file = args.config
+
+    # Load config
+    # config_file = "data/sst2/sst2.json"
+    # config_file = "data/sst2/sst2.bert.json"
+
     with open(config_file, "r") as reader:
         config = json.load(reader)
     formatted_json = json.dumps(config, indent=4, sort_keys=True)  # json read friendly format
     print("Config:")
     print(formatted_json)
     print()
+
+    config["device"] = device
+    config["task"] = "clf"
 
     # create save_dir folder if not exists
     if not os.path.exists(config['save_dir']):
@@ -65,18 +65,18 @@ def main():
     tokenizer.model_max_length = config['max_len']
 
     print("Loading data...")
-    AGNDataloader = AGNDataLoader(tokenizer,
+    clf_dataloader = ClfDataLoader(tokenizer,
                                   device=device,
                                   ae_latent_dim=config['ae_latent_dim'],
                                   use_vae=True,
                                   batch_size=config["batch_size"],
                                   ae_epochs=config['ae_epochs'],
                                   max_length=config['max_len'])
-    AGNDataloader.set_train(config['train_path'])
-    AGNDataloader.set_dev(config['dev_path'])
-    AGNDataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder_weights.pth'))
-    AGNDataloader.save_vocab(os.path.join(config['save_dir'], 'vocab.pickle'))
-    config['output_size'] = AGNDataloader.label_size
+    clf_dataloader.set_train(config['train_path'])
+    clf_dataloader.set_dev(config['dev_path'])
+    clf_dataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder_weights.pth'))
+    clf_dataloader.save_vocab(os.path.join(config['save_dir'], 'vocab.pickle'))
+    config['output_size'] = clf_dataloader.label_size
     print()
 
     print("Begin training AGN")
@@ -84,48 +84,28 @@ def main():
     f1_list = []
     for idx in range(1, config['iterations'] + 1):
         print(f"Starting iteration {idx}")
-        train_dataset = AGNPaddedDataset(AGNDataloader.train_set)
+        train_dataset = ClfPaddedDataset(clf_dataloader.train_set)
         train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-        val_dataset = AGNPaddedDataset(AGNDataloader.dev_set)
+
+        val_dataset = ClfPaddedDataset(clf_dataloader.dev_set)
         val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
 
         model = AGNModel(config)
         model = model.to(device)
 
-        # 训练模型，并可能添加额外的回调以跟踪验证精度和F1分数
-        acc, f1 = train_agn_model(model, train_dataloader, val_dataloader, device, epochs=config["epochs"],
-                                  learning_rate=config["learning_rate"],
-                                  save_path=config["save_dir"])
-        # 保存每次迭代的性能
+        acc, f1 = train_agn_model(model, train_dataloader, val_dataloader, device, config=config)
+
         accuracy_list.append(acc)
         f1_list.append(f1)
-        print(f"Iteration {idx} End.  Accuracy: {acc}, F1: {f1}")
+        print(f"Iteration {idx} End.")
         print()
 
     # 计算所有迭代的平均精度和F1分数
-    print("Average accuracy of all iterations:", sum(accuracy_list) / len(accuracy_list))
-    print("Average f1 of all iterations:", sum(f1_list) / len(f1_list))
-
-
-
-
-    # print("Begin training AGN")
-    # train_dataset = AGNPaddedDataset(AGNDataloader.train_set[:300])
-    # train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-    #
-    # val_dataset = AGNPaddedDataset(AGNDataloader.dev_set)
-    # val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True)
-    #
-    # model = AGNModel(config)
-    # model = model.to(device)
-    #
-    # # train_agn_model(model=model, data_loader=train_dataloader, device=device,
-    # #                 epochs=config['epochs'], learning_rate=config['learning_rate'])
-    #
-    # train_agn_model(model, train_dataloader, val_dataloader, device, epochs=config["epochs"], learning_rate=config["learning_rate"], save_path=config["save_dir"])
+    print("Average accuracy of all iterations:", np.mean(accuracy_list))
+    print("Average f1 of all iterations:", np.mean(f1_list))
 
 
 if __name__ == '__main__':
     set_seed(42)
     device = check_device()
-    main()
+    main(device)

@@ -9,68 +9,11 @@ import torch.nn.functional as F
 import torch
 from torch.utils.data import Dataset
 
-from metrics import ClfMetrics
+from clf_metrics import ClfMetrics
+from ner_metrics import NerMetrics
 from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device
 
-
-class AGNPaddedDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-        # 分别计算每种类型的最大长度
-        self.max_token_length = max(len(item['token_ids']) for item in data)
-        self.max_segment_length = max(len(item['segment_ids']) for item in data)
-        self.max_tcol_length = max(len(item['tcol_ids']) for item in data)
-
-        # 对整个数据集进行预填充
-        self.padded_data = [self.pad_item(item) for item in data]
-
-    def pad_item(self, item):
-        # token_ids
-        token_ids_tensor = item['token_ids']
-        token_padding_length = self.max_token_length - len(item['token_ids'])
-        if token_padding_length > 0:
-            padded_token_ids = torch.cat(
-                (token_ids_tensor, torch.zeros(token_padding_length, dtype=token_ids_tensor.dtype)), dim=0)
-            # 创建 token_attention_mask
-            token_attention_mask = torch.cat(
-                (torch.ones(len(item['token_ids']), dtype=torch.bool),
-                 torch.zeros(token_padding_length, dtype=torch.bool)), dim=0)
-        else:
-            padded_token_ids = token_ids_tensor
-            token_attention_mask = torch.ones(len(item['token_ids']), dtype=torch.bool)
-
-        # segment_ids
-        segment_ids_tensor = item['segment_ids']
-        segment_padding_length = self.max_segment_length - len(item['segment_ids'])
-        if segment_padding_length > 0:
-            padded_segment_ids = torch.cat(
-                (segment_ids_tensor, torch.zeros(segment_padding_length, dtype=segment_ids_tensor.dtype)), dim=0)
-        else:
-            padded_segment_ids = segment_ids_tensor
-
-        # tcol_ids
-        tcol_ids_tensor = item['tcol_ids']
-        tcol_padding_length = self.max_tcol_length - len(item['tcol_ids'])
-        if tcol_padding_length > 0:
-            padded_tcol_ids = torch.cat(
-                (tcol_ids_tensor, torch.zeros(tcol_padding_length, dtype=tcol_ids_tensor.dtype)), dim=0)
-
-        else:
-            padded_tcol_ids = tcol_ids_tensor
-
-        return {
-            'token_ids': padded_token_ids,
-            'segment_ids': padded_segment_ids,
-            'tcol_ids': padded_tcol_ids,
-            'label_id': torch.tensor(item['label_id']),
-            'attention_mask': token_attention_mask,
-        }
-
-    def __len__(self):
-        return len(self.padded_data)
-
-    def __getitem__(self, idx):
-        return self.padded_data[idx]
+from torchcrf import CRF
 
 
 class SelfAttention(nn.Module):
@@ -179,10 +122,10 @@ class AGN(nn.Module):
 
 
 class AGNModel(nn.Module):
-    def __init__(self, config, task='clf'):
+    def __init__(self, config):
         super(AGNModel, self).__init__()
         self.config = config
-        self.task = task
+        self.task = config["task"]
 
         # 加载预训练的 BERT 模型
         self.bert = BertModel.from_pretrained(config['pretrained_model_dir'])
@@ -199,50 +142,72 @@ class AGNModel(nn.Module):
                        dynamic_valve=self.config.get('use_dynamic_valve', False))
 
         if self.task == 'clf':
-            self.output_layer = nn.Sequential(
+            self.clf_output_layer = nn.Sequential(
                 nn.Linear(feature_size, config.get('hidden_size', 256)),
                 nn.ReLU(),
                 nn.Dropout(config.get('dropout_rate', 0.1)),
                 nn.Linear(config.get('hidden_size', 256), config['output_size']),
                 nn.Softmax(dim=-1)
             )
-        # elif self.task == 'ner':
-        #     self.output_dense = nn.Linear(feature_size, self.config['output_size'])
-        #     # 假设 CRF 层已经定义
-        #     self.crf = CRF(self.config['output_size'])
+        elif self.task == 'ner':
+            self.ner_drop = nn.Dropout(config.get('dropout_rate', 0.1))
+            self.ner_linear = nn.Linear(feature_size, config['hidden_size'])
+            self.ner_hidden2tag = nn.Linear(config['hidden_size'], config["label_size"])
+
         elif self.task == 'sts':
             # 定义回归或其他输出层
             pass
 
     def forward(self, input):
-        token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input["tcol_ids"], input[
-            "attention_mask"]
-        outputs = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
-        sequence_output = outputs.last_hidden_state  # torch.Size([64, 65, 768])
+        if self.task == 'clf':
+            token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input["tcol_ids"], \
+                input["attention_mask"]
+        else:
+            token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input[
+                "tfidf_vector"], input["attention_mask"]
+
+        bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
+        bert_sequence_output = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
 
         # GI 处理
         gi = self.gi_linear(gi)
         gi = self.gi_dropout(gi)
         gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
 
-        # AGN 处理
-        agn_output, attn_weight = self.agn(sequence_output, gi)
+        # 选择输入源
+        if self.config.get('use_agn', True):
+            agn_output, attn_weight = self.agn(bert_sequence_output, gi)
+            inter_output = agn_output
+        else:
+            inter_output = bert_sequence_output
 
+        # 根据任务类型处理输出
         if self.task == 'clf':
-            pooled_output = torch.max(agn_output, dim=1)[0]
-            output = self.output_layer(pooled_output)
-
-            # output = self.output_activation(output)
+            pooled_output = torch.max(inter_output, dim=1)[0]
+            output = self.clf_output_layer(pooled_output)
         elif self.task == 'ner':
-            output = self.output_linear(agn_output)
-            output = self.crf(output)
-        elif self.task == 'sts':
-            # 处理回归任务的输出
-            pass
+            output = self.ner_drop(inter_output)
+            output = self.ner_linear(output)
+            output = self.ner_hidden2tag(output)
+
+        # elif self.task == 'sts':
+        #     # 处理回归任务的输出
+        #     pass
         return output
 
 
+class CRFLayer:
+    def __init__(self, config):
+        target_size = config["label_size"]
+        device = config["device"]
+        self.crf = CRF(target_size, batch_first=True).to(device)
 
+    def compute_loss(self, emissions, tags, mask):
+        output = self.crf(emissions, tags, mask.bool())
+        return -output
+
+    def decode(self, emissions, mask):
+        return self.crf.decode(emissions, mask.bool())
 
 
 def update_learning_rate(optimizer, decay_rate=0.9):
@@ -250,49 +215,21 @@ def update_learning_rate(optimizer, decay_rate=0.9):
         param_group['lr'] *= decay_rate
 
 
-# def train_agn_model(model, data_loader, device, epochs=10, learning_rate=1e-5):
-#     loss_fn = torch.nn.CrossEntropyLoss()
-#     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-#     model.train()
-#     step = 0
-#     decay_steps = 100
-#
-#     for epoch in range(epochs):
-#         total_loss = 0
-#         # Create progress bar using tqdm
-#         progress_bar = tqdm(data_loader, desc=f'Epoch {epoch + 1}/{epochs}', leave=True)
-#         for data in progress_bar:
-#             data = move_to_device(data, device)
-#             inputs, labels = data, data["label_id"]
-#
-#             optimizer.zero_grad()
-#             outputs = model(inputs)
-#             loss = loss_fn(outputs, labels)
-#             total_loss += loss.item()
-#
-#             loss.backward()
-#             optimizer.step()
-#
-#             progress_bar.set_postfix(loss=loss.item())
-#             step += 1
-#             if step % decay_steps == 0:  # update learning rate
-#                 update_learning_rate(optimizer)
-#                 # print(f"Step {step}: Learning rate decayed to {optimizer.param_groups[0]['lr']}")
-#         avg_loss = total_loss / len(data_loader)
-#         print(f"Epoch {epoch + 1}/{epochs}, Loss: {avg_loss}")
+def train_agn_model(model, train_loader, test_loader, device, config, learning_rate=1e-5):
+    epochs = config["epochs"]
+    save_dir = config["save_dir"]
+    if config["task"] == "ner":
+        model.crf = CRFLayer(config)
+        loss_fn = model.crf
+        callback = NerMetrics(model=model, eval_data_loader=test_loader, device=device, save_dir=save_dir, epochs=epochs)
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss()
+        callback = ClfMetrics(model, test_loader, device, save_dir, epochs)
 
-def train_agn_model(model, train_loader, val_loader, device, epochs=10, learning_rate=1e-5, save_path='best_model.pth'):
-    loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-    accuracy_list = []
-    f1_list = []
-
-    # 初始化回调
-    callback = ClfMetrics(model, val_loader, device, save_path, epochs)
-
     step = 0
     decay_steps = 100
+
 
     for epoch in range(epochs):
         model.train()
@@ -301,11 +238,17 @@ def train_agn_model(model, train_loader, val_loader, device, epochs=10, learning
 
         for data in progress_bar:
             data = move_to_device(data, device)
-            inputs, labels = data, data["label_id"]
+            inputs, labels = data, data["label_ids"]
 
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = loss_fn(outputs, labels)
+
+            if config["task"] == "ner":
+                mask = data["attention_mask"]
+                loss = loss_fn.compute_loss(outputs, labels, mask)
+            else:
+                loss = loss_fn(outputs, labels)
+
             loss.backward()
             optimizer.step()
 
@@ -325,17 +268,7 @@ def train_agn_model(model, train_loader, val_loader, device, epochs=10, learning
             print("Training stopped early.")
             break
 
-    return max(callback.history['val_acc']), max(callback.history['val_f1'])
-
-    #     accuracy = max(callback.history["val_acc"])
-    #     f1 = max(callback.history["val_f1"])
-    #     accuracy_list.append(accuracy)
-    #     f1_list.append(f1)
-    #     log = f"iteration {epoch} accuracy: {accuracy}, f1: {f1}\n"
-    #     print(log)
-    #
-    # print("Average accuracy:", sum(accuracy_list) / len(accuracy_list))
-    # print("Average f1:", sum(f1_list) / len(f1_list))
+    return callback.history['val_acc'], callback.history['val_f1']
 
 
 def test_agn_model(model, val_loader, device, loss_fn):

@@ -1,3 +1,8 @@
+import json
+import re
+from collections import defaultdict
+
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import Dataset
@@ -74,56 +79,8 @@ class Swish(nn.Module):
         return x * torch.sigmoid(self.beta * x)
 
 
-# class AGNDataset(Dataset):
-#     def __init__(self, data, labels):
-#         self.data = data
-#         self.labels = labels
-#
-#     def __len__(self):
-#         return len(self.data)
-#
-#     def __getitem__(self, index):
-#         data_sample = self.data[index]
-#         label = self.labels[index]
-#         return data_sample, label
 
-class AGNDataset(Dataset):
-    def __init__(self, texts, labels, gi_features, tokenizer, max_len=512):
-        self.texts = texts
-        self.labels = labels
-        self.gi_features = gi_features
-        self.tokenizer = tokenizer
-        self.max_len = max_len
 
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, index):
-        text = self.texts[index]
-        label = self.labels[index]
-        gi_feature = self.gi_features[index]
-
-        # Tokenizing text
-        inputs = self.tokenizer.encode_plus(
-            text,
-            None,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            padding='max_length',
-            return_token_type_ids=False,
-            return_attention_mask=True,
-            truncation=True
-        )
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
-
-        return {
-            'input_ids': torch.tensor(input_ids, dtype=torch.long),
-            'attention_mask': torch.tensor(attention_mask, dtype=torch.long),
-            'labels': torch.tensor(label, dtype=torch.long),
-            'gi_feature': torch.tensor(gi_feature, dtype=torch.float)
-
-        }
 
 def move_to_device(data, device):
     """Moves all data in the dictionary to the device"""
@@ -131,3 +88,26 @@ def move_to_device(data, device):
         if isinstance(value, torch.Tensor):
             data[key] = value.to(device)
     return data
+
+
+def clean_str(string):
+    """
+    Tokenization/string cleaning for all datasets except for SST.
+    """
+    string = string.replace("\n", "")
+    string = string.replace("\t", "")
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+    string = re.sub(r"\'s", " \'s", string)
+    string = re.sub(r"\'ve", " \'ve", string)
+    string = re.sub(r"n\'t", " n\'t", string)
+    string = re.sub(r"\'re", " \'re", string)
+    string = re.sub(r"\'d", " \'d", string)
+    string = re.sub(r"\'ll", " \'ll", string)
+    string = re.sub(r",", " , ", string)
+    string = re.sub(r"!", " ! ", string)
+    string = re.sub(r"\(", " ( ", string)
+    string = re.sub(r"\)", " ) ", string)
+    string = re.sub(r"\?", " ? ", string)
+    string = re.sub(r"\s{2,}", " ", string)
+    return string.strip().lower()
+
