@@ -5,10 +5,14 @@ from pprint import pprint
 import torch
 from transformers import BertTokenizer
 from ner_dataloader import NerDataLoader, NerDataset, collate_fn
-from model_AGN import AGNModel, train_agn_model
+from model_AGN import AGNModel, train_agn_model, test_agn_model
 from torch.utils.data import DataLoader
 import numpy as np
 import os
+import logging
+
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def set_seed(seed=42):
@@ -38,13 +42,13 @@ def check_device():
 
 
 def main(device):
-    parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
-    parser.add_argument('--config', type=str, default="data/sst2/sst2.json")
-    args = parser.parse_args()
-    config_file = args.config
+    # parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
+    # parser.add_argument('--config', type=str, default="data/sst2/sst2.json")
+    # args = parser.parse_args()
+    # config_file = args.config
 
     # Load config
-    # config_file = "data/ner/conll2003.json"
+    config_file = "data/ner/conll2003.json"
     # config_file = "data/ner/conll2003.bert.json"
 
     with open(config_file, "r") as reader:
@@ -66,35 +70,67 @@ def main(device):
     tokenizer.model_max_length = config['max_len']
 
     print("Load data...")
-    ner_dataloader = NerDataLoader(config['dataset_name'], tokenizer, device=config["device"], max_len=config['max_len'],
-                               ae_latent_dim=config['ae_latent_dim'], use_vae=config['use_vae'],
-                               batch_size=config["batch_size"],
-                               ae_epochs=config['ae_epochs'])
+    ner_dataloader = NerDataLoader(config['dataset_name'], tokenizer, feature=config["feature"],
+                                   device=config["device"],
+                                   max_len=config['max_len'],
+                                   ae_latent_dim=config['ae_latent_dim'], use_vae=config['use_vae'],
+                                   batch_size=config["batch_size"],
+                                   ae_epochs=config['ae_epochs'])
     ner_dataloader.set_train()
     ner_dataloader.set_dev()
+    ner_dataloader.set_test()
     ner_dataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder.weights'))
     config['label_size'] = ner_dataloader.label_size
     print()
 
+    logging.basicConfig(
+        filename=config["save_dir"]+'/ner_results.log',
+        level=logging.INFO,
+        format=' %(message)s',
+        filemode='w',
+    )
+
     print("Begin training AGN")
+    accuracy_list = []
+    macro_f1_list = []
     micro_f1_list = []
     for idx in range(1, config['iterations'] + 1):
         print(f"Starting iteration {idx}")
-        train_dataset = NerDataset(ner_dataloader.train_set)
+        train_dataset = NerDataset(ner_dataloader.train_set.data[:128])
         train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, collate_fn=collate_fn)
 
-        val_dataset = NerDataset(ner_dataloader.dev_set)
+        val_dataset = NerDataset(ner_dataloader.dev_set.data[:128])
         val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
 
         model = AGNModel(config).to(device)
 
-        _, f1 = train_agn_model(model, train_loader, val_loader, device, config=config)
+        callback = train_agn_model(model, train_loader, val_loader, device, config=config)
 
-        micro_f1_list.append(f1)
+        accuracy_list.append(callback.history["val_acc"])
+        macro_f1_list.append(callback.history["val_macro_f1"])
+        micro_f1_list.append(callback.history["val_micro_f1"])
         print(f"Iteration {idx} End.")
         print()
 
-    print("Average micro f1:", np.mean(micro_f1_list))
+    model = AGNModel(config).to(device)
+    test_dataset = NerDataset(ner_dataloader.dev_set.data[:128])
+    test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
+    avg_loss, acc, macro_f1, micro_f1, report = test_agn_model(model, test_loader, config)
+
+    print("Test Report:" + "\n")
+    print(report)
+    print(f"Test Loss: {avg_loss:.4f}")
+    print(f"Test Accuracy: {acc:.4f}")
+    print(f"Test Macro F1-Score: {macro_f1:.4f}")
+    print(f"Test Micro F1-Score: {micro_f1:.4f}")
+
+    logging.info("\n" + "Test Report" + "\n" + report)
+    logging.info(f"Test Loss: {avg_loss:.4f}")
+    logging.info(f"Test Accuracy: {acc:.4f}")
+    logging.info(f"Test Macro F1-Score: {macro_f1:.4f}")
+    logging.info(f"Test Micro F1-Score: {micro_f1:.4f}")
+
+    logging.info("\n" + str(formatted_json))
 
 
 if __name__ == '__main__':

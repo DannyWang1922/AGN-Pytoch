@@ -1,6 +1,9 @@
 import pickle
 import os
+from collections import defaultdict
 
+import numpy as np
+import pandas as pd
 import torch
 from datasets import load_dataset
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -28,10 +31,10 @@ class NerDataset(Dataset):
     def __getitem__(self, idx):
         dic = self.data[idx]
         data = {
-            'token_ids': torch.tensor(dic['token_ids'], dtype=torch.long),
-            'segment_ids': torch.tensor(dic['segment_ids'], dtype=torch.long),
-            'tfidf_vector': torch.tensor(dic['tfidf_vector'], dtype=torch.float),
-            'label_id': torch.tensor(dic['label_id'], dtype=torch.long)
+            'token_ids': torch.tensor(dic['token_ids'], dtype=torch.long).clone().detach(),
+            'segment_ids': torch.tensor(dic['segment_ids'], dtype=torch.long).clone().detach(),
+            'tfidf_vector': torch.tensor(dic['tfidf_vector'], dtype=torch.float).clone().detach(),
+            'label_ids': torch.tensor(dic['label_ids'], dtype=torch.long).clone().detach()
         }
         return data
 
@@ -40,7 +43,7 @@ def collate_fn(batch):
     batch_token_ids = [item['token_ids'] for item in batch]
     batch_segment_ids = [item['segment_ids'] for item in batch]
     batch_tfidf = [item['tfidf_vector'] for item in batch]
-    batch_label_ids = [item['label_id'] for item in batch]
+    batch_label_ids = [item['label_ids'] for item in batch]
 
     batch_token_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
     attention_masks = torch.nn.utils.rnn.pad_sequence([torch.ones_like(ids) for ids in batch_token_ids],
@@ -58,8 +61,48 @@ def collate_fn(batch):
     }
 
 
+def generate_tcol_vectors(all_tokens, all_labels):
+    # 提取所有可能的标签
+    possible_labels = set(label for labels in all_labels for label in labels)
+    token_label_counts = defaultdict(lambda: defaultdict(int))
+    num_labels = len(possible_labels)
+
+    # 扁平化token和标签列表
+    tokens = [word_token for sentence_token in all_tokens for word_token in sentence_token]
+    labels = [word_label for sentence_token in all_labels for word_label in sentence_token]
+
+    # 统计每个token对应的标签频率
+    for token, label in zip(tokens, labels):
+        token_label_counts[token][label] += 1
+
+    # 生成TCol向量
+    token_tcol = {}
+    token_tcol[0] = np.array([0] * num_labels)  # pad
+    token_tcol[1] = np.array([0] * num_labels)  # unk
+    token_tcol[0] = np.reshape(token_tcol[0], (1, -1))
+    token_tcol[1] = np.reshape(token_tcol[1], (1, -1))
+
+    for token, label_counts in token_label_counts.items():
+        total_counts = sum(label_counts.values())
+        vector = [label_counts[label] / total_counts for label in sorted(possible_labels)]
+        token_tcol[token] = np.reshape(np.array(vector), (1, -1))
+
+    return token_tcol  # {'I': [0.0, 0.0, 1.0], 'live': [0.0, 0.0, 1.0]}
+
+def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
+    tcol_vectors = []
+    for obj in all_tokens:
+        padded = [0] * (max_len - len(obj))
+        token_ids = obj + padded
+        tcol_vector = np.concatenate([token_tcol.get(token, token_tcol[1]) for token in token_ids[:max_len]])
+        tcol_vector = np.reshape(tcol_vector, (-1))
+        tcol_vectors.append(tcol_vector)
+    return np.array(tcol_vectors)
+
+
 class NerDataLoader:
-    def __init__(self, dataset_name, tokenizer, device, max_len=512, ae_latent_dim=128, use_vae=False, batch_size=64,
+    def __init__(self, dataset_name, tokenizer, device, feature, max_len=512, ae_latent_dim=128, use_vae=False,
+                 batch_size=64,
                  ae_epochs=20):
         self.dataset_name = dataset_name
         self.use_vae = use_vae
@@ -74,6 +117,7 @@ class NerDataLoader:
         self.tfidf_Vectorizer = TfidfVectorizer(stop_words='english', min_df=3, max_features=5000)
         self.autoencoder = None
         self.device = device
+        self.feature = feature
 
     def load_vocab(self, save_path):
         with open(save_path, 'rb') as reader:
@@ -124,15 +168,35 @@ class NerDataLoader:
                                                activation=nn.ReLU())
             self.autoencoder = self.autoencoder.to(self.device)
 
-    def prepare_tfidf(self, data, is_train=False):
+    def get_tcol_feature(self, data):
+        df_data = pd.DataFrame(data)
+        all_tokens = df_data['token_ids'].tolist()
+        all_labels = df_data['label_ids'].tolist()
+
+        token_tocol = generate_tcol_vectors(all_tokens, all_labels)
+        with open('token_tocol.txt', 'w', encoding='utf-8') as file:
+            for item in token_tocol:
+                file.write(f"{str(item)}\n")
+
+        sentence_tocol = sentence_tcol_vectors(all_tokens, token_tocol, max_len=self.max_len)
+        return sentence_tocol
+
+    def prepare_stat_feature(self, data, is_train=False):
         if self.use_vae:
             print("Batch alignment...")
             print("\tPrevious data size:", len(data))
             keep_size = len(data) // self.batch_size
             data = data[:keep_size * self.batch_size]
             print("\tAlignment data size:", len(data))
-        X = self.tfidf_Vectorizer.transform([obj['raw_text'] for obj in data]).todense()
-        print('\tTF-IDF vector shape:', X.shape)
+
+        if self.feature == "tfidf":
+            print('\tUsing TF-IDF...')
+            X = self.tfidf_Vectorizer.transform([obj['raw_text'] for obj in data]).todense()
+            print('\tTF-IDF vector shape:', X.shape)
+        elif self.feature == "tcol":
+            print('\tUsing TCol...')
+            X = self.get_tcol_feature(data)
+            print('\tTCol vector shape:', X.shape)
         X = torch.from_numpy(X).to(dtype=torch.float32)
 
         if is_train:
@@ -170,12 +234,14 @@ class NerDataLoader:
                 'raw_text': raw_text,
                 'token_ids': token_ids,
                 'segment_ids': [0] * len(token_ids),
-                'label_id': tag_ids
+                'label_ids': tag_ids
             })
             # fit tf-idf
+
         if is_train:
-            self.tfidf_Vectorizer.fit(tfidf_corpus)
+            if self.feature == "tfidf":
+                self.tfidf_Vectorizer.fit(tfidf_corpus)
             self._label_size = len(all_label_set)
-        data = self.prepare_tfidf(data, is_train=is_train)
+        data = self.prepare_stat_feature(data, is_train=is_train)
 
         return data

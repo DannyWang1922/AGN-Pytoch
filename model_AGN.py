@@ -1,3 +1,7 @@
+import logging
+import os
+
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 from torch import optim
 from torch.utils.data import Dataset, DataLoader
 import torch
@@ -103,7 +107,6 @@ class AGN(nn.Module):
             self.dynamic_valve_layer = nn.Dropout(1.0 - self.valve_rate)
 
         self.dropout = nn.Dropout(self.dropout_rate)
-
         self.attn = SelfAttention(feature_size, activation=self.activation, dropout_rate=self.dropout_rate,
                                   return_attention=True)
 
@@ -150,6 +153,7 @@ class AGNModel(nn.Module):
                 nn.Softmax(dim=-1)
             )
         elif self.task == 'ner':
+            self.crf = CRFLayer(config)
             self.ner_drop = nn.Dropout(config.get('dropout_rate', 0.1))
             self.ner_linear = nn.Linear(feature_size, config['hidden_size'])
             self.ner_hidden2tag = nn.Linear(config['hidden_size'], config["label_size"])
@@ -219,9 +223,9 @@ def train_agn_model(model, train_loader, test_loader, device, config, learning_r
     epochs = config["epochs"]
     save_dir = config["save_dir"]
     if config["task"] == "ner":
-        model.crf = CRFLayer(config)
         loss_fn = model.crf
-        callback = NerMetrics(model=model, eval_data_loader=test_loader, device=device, save_dir=save_dir, epochs=epochs)
+        callback = NerMetrics(model=model, eval_data_loader=test_loader, device=device, save_dir=save_dir,
+                              epochs=epochs)
     else:
         loss_fn = torch.nn.CrossEntropyLoss()
         callback = ClfMetrics(model, test_loader, device, save_dir, epochs)
@@ -229,7 +233,6 @@ def train_agn_model(model, train_loader, test_loader, device, config, learning_r
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     step = 0
     decay_steps = 100
-
 
     for epoch in range(epochs):
         model.train()
@@ -268,29 +271,66 @@ def train_agn_model(model, train_loader, test_loader, device, config, learning_r
             print("Training stopped early.")
             break
 
-    return callback.history['val_acc'], callback.history['val_f1']
+    return callback
 
 
-def test_agn_model(model, val_loader, device, loss_fn):
-    model.eval()  # 设置模型为评估模式
-    total_val_loss = 0
-    total_correct = 0
-    total_samples = 0
+def test_agn_model(model_class, test_loader, config):
+    # 定义模型保存路径
+    model_path = os.path.join(config["save_dir"], "AGN_weights.pth")
+
+    # 确保模型文件存在
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+
+    device = config["device"]
+    # 加载模型
+    model = model_class
+    model.load_state_dict(torch.load(model_path))
+    model.to(device)
+    model.eval()
+
+    # 定义损失函数
+    if config["task"] == "ner":
+        loss_fn = model.crf
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss()
+
+    total_loss = 0
+    y_true, y_pred = [], []
+    progress_bar = tqdm(test_loader, desc="Testing", leave=True)
 
     with torch.no_grad():
-        for data in val_loader:
+        for data in progress_bar:
             data = move_to_device(data, device)
-            inputs, labels = data, data["label_id"]
+            inputs, labels = data, data["label_ids"]
+
             outputs = model(inputs)
-            loss = loss_fn(outputs, labels)
-            total_val_loss += loss.item()
+            mask = inputs["attention_mask"]
 
-            # 计算准确率
-            _, predicted = torch.max(outputs.data, 1)
-            total_correct += (predicted == labels).sum().item()
-            total_samples += labels.size(0)
+            if config["task"] == "ner":
+                loss = loss_fn.compute_loss(outputs, labels, mask)
+                preds = model.crf.decode(outputs, mask)
+            else:
+                loss = loss_fn(outputs, labels)
+                preds = torch.argmax(outputs, dim=1).cpu().numpy()
 
-    avg_val_loss = total_val_loss / len(val_loader)
-    val_accuracy = total_correct / total_samples
-    print(f'Validation Loss: {avg_val_loss}, Accuracy: {val_accuracy}')
-    return avg_val_loss, val_accuracy
+            total_loss += loss.item()
+
+            if config["task"] == "ner":
+                for i in range(len(labels)):
+                    masked_true_labels = labels[i][labels[i] != -1].cpu().numpy()
+                    y_true.extend(masked_true_labels)
+                    y_pred.extend(preds[i])
+            else:
+                y_true.extend(labels.cpu().numpy())
+                y_pred.extend(preds)
+
+    avg_loss = total_loss / len(test_loader)
+
+    # 计算评估指标
+    acc = accuracy_score(y_true, y_pred)
+    macro_f1 = f1_score(y_true, y_pred, average="macro")
+    micro_f1 = f1_score(y_true, y_pred, average="micro")
+    report = classification_report(y_true, y_pred, zero_division=0)
+
+    return avg_loss, acc, macro_f1, micro_f1, report

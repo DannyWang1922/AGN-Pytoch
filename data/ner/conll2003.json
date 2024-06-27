@@ -1,10 +1,10 @@
 {
     "dataset_name": "conll2003",
     "max_len": 128,
-    "ae_epochs": 20,
+    "ae_epochs": 1,
     "ae_latent_dim": 2048,
-    "epochs": 50,
-    "batch_size": 256,
+    "epochs": 1,
+    "batch_size": 128,
     "learning_rate": 0.00002,
     "pretrained_model_dir": "pretrained_bert",
     "train_path": "data/ner/train.json",
@@ -18,5 +18,6 @@
     "valve_rate": 0.4,
     "use_dynamic_valve": false,
     "use_vae": true,
-    "use_agn": true
+    "use_agn": true,
+    "feature": "tcol"
 }

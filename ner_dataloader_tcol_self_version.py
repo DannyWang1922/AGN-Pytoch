@@ -28,7 +28,7 @@ def load_conll(fpath, tokenizer, build_vocab=False):
                 'token_ids': token_ids,
                 'pos_tags': obj['pos_tags'],
                 'chunk_tags': obj['chunk_tags'],
-                'label_id': obj["label"]
+                'label_ids': obj["label"]
             })
     return data
 
@@ -76,7 +76,7 @@ def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
 def parse_tcol_ids(data):
     df_data = pd.DataFrame(data)
     all_tokens = df_data['token_ids'].tolist()
-    all_labels = df_data['label_id'].tolist()
+    all_labels = df_data['label_ids'].tolist()
 
     token_tocol = generate_tcol_vectors(all_tokens, all_labels)
     sentence_tocol = sentence_tcol_vectors(all_tokens, token_tocol)

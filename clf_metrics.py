@@ -1,3 +1,4 @@
+import logging
 import os
 
 import numpy as np
@@ -37,19 +38,28 @@ class ClfMetrics:
                 y_pred.extend(preds.cpu().numpy())
 
         acc = accuracy_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred, average='macro')
-        return acc, f1
+        macro_f1 = f1_score(y_true, y_pred, average="macro")
+        micro_f1 = f1_score(y_true, y_pred, average="micro")
+        # report = classification_report(y_true, y_pred, zero_division=0)
+        return acc, macro_f1, micro_f1
 
     def on_epoch_end(self, epoch, avg_loss):
-        val_acc, val_f1 = self.calc_metrics()
+        val_acc, val_macro_f1, val_micro_f1 = self.calc_metrics()
         self.history['val_acc'].append(val_acc)
-        self.history['val_f1'].append(val_f1)
-        print(f"Epoch {epoch + 1}/{self.epochs}, Loss: {avg_loss}, Val_acc {val_acc}, Val_f1 {val_f1}")
-        if self.monitor_op(val_f1 - self.min_delta, self.best):
-            self.best = val_f1
+        self.history['val_macro_f1'].append(val_macro_f1)
+        self.history['val_micro_f1'].append(val_micro_f1)
+
+        print(
+            f"Epoch {epoch + 1}/{self.epochs}, Loss: {avg_loss:.4f}, val_acc: {val_acc:.4f}, val_macro_f1: {val_macro_f1:.4f}, val_micro_f1: {val_micro_f1:.4f}")
+        logging.info(
+            f"Epoch {epoch + 1}/{self.epochs}, Loss: {avg_loss:.4f}, val_acc: {val_acc:.4f}, val_macro_f1: {val_macro_f1:.4f}, val_micro_f1: {val_micro_f1:.4f}")
+
+        if self.monitor_op(val_macro_f1 - self.min_delta, self.best):
+            self.best = val_macro_f1
             self.wait = 0
             print(f'New best model, saving model to {self.save_dir}...')
-            torch.save(self.model.state_dict(), os.path.join(self.save_dir, 'AGN_clf_weights.pth'))
+            logging.info(f'New best model, save model to {self.save_dir}...')
+            torch.save(self.model.state_dict(), os.path.join(self.save_dir, 'AGN_weights.pth'))
         else:
             self.wait += 1
             if self.wait >= self.patience:
