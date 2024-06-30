@@ -16,6 +16,8 @@ import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
+from utils import read_json
+
 
 def convert_to_tensor(data, dtype=torch.float):
     return torch.tensor(data, dtype=dtype)
@@ -132,14 +134,14 @@ class NerDataLoader:
         self.init_autoencoder()
         self.autoencoder.load_state_dict(torch.load(save_path))
 
-    def set_train(self):
-        self._train_set = self._read_data(self.dataset_name, "train", is_train=True)
+    def set_train(self, train_path):
+        self._train_set = self._read_data(train_path, is_train=True)
 
-    def set_dev(self):
-        self._dev_set = self._read_data(self.dataset_name, "validation")
+    def set_dev(self, dev_path):
+        self._dev_set = self._read_data(dev_path)
 
-    def set_test(self):
-        self._test_set = self._read_data(self.dataset_name, "test")
+    def set_test(self, test_path):
+        self._test_set = self._read_data(test_path)
 
     @property
     def train_set(self):
@@ -209,8 +211,8 @@ class NerDataLoader:
             obj['tfidf_vector'] = x.tolist()
         return data
 
-    def _read_data(self, name, split, is_train=False):
-        dataset = load_dataset(name)[split]
+    def _read_data(self, file_path, is_train=False):
+        dataset = read_json(file_path)
         data = []
         tfidf_corpus = []
         all_label_set = set()
@@ -245,3 +247,5 @@ class NerDataLoader:
         data = self.prepare_stat_feature(data, is_train=is_train)
 
         return data
+
+

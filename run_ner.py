@@ -1,7 +1,6 @@
 import argparse
 import json
 import random
-from pprint import pprint
 import torch
 from transformers import BertTokenizer
 from ner_dataloader import NerDataLoader, NerDataset, collate_fn
@@ -10,9 +9,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import os
 import logging
-
-import warnings
-warnings.filterwarnings("ignore")
+from utils import get_save_dir
 
 
 def set_seed(seed=42):
@@ -32,9 +29,6 @@ def check_device():
     if torch.cuda.is_available():
         print("CUDA is available.")
         device = torch.device("cuda")
-    # elif torch.backends.mps.is_available():
-    #     print("MPS is available.")
-    #     device = torch.device("mps")
     else:
         print("Using CPU.")
         device = torch.device("cpu")
@@ -42,13 +36,13 @@ def check_device():
 
 
 def main(device):
-    # parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
-    # parser.add_argument('--config', type=str, default="data/sst2/sst2.json")
-    # args = parser.parse_args()
-    # config_file = args.config
+    parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
+    parser.add_argument('--config', type=str, default="data/ner/conll2003.json")
+    args = parser.parse_args()
+    config_file = args.config
 
     # Load config
-    config_file = "data/ner/conll2003.json"
+    # config_file = "data/ner/conll2003.json"
     # config_file = "data/ner/conll2003.bert.json"
 
     with open(config_file, "r") as reader:
@@ -60,10 +54,7 @@ def main(device):
 
     config["device"] = device
     config["task"] = "ner"
-
-    # Create save_dir folder if not exists
-    if not os.path.exists(config['save_dir']):
-        os.makedirs(config['save_dir'])
+    config['save_dir'] = get_save_dir(config['save_dir'])
 
     # Load tokenizer
     tokenizer = BertTokenizer.from_pretrained(config['pretrained_model_dir'], do_lower_case=True)
@@ -76,9 +67,9 @@ def main(device):
                                    ae_latent_dim=config['ae_latent_dim'], use_vae=config['use_vae'],
                                    batch_size=config["batch_size"],
                                    ae_epochs=config['ae_epochs'])
-    ner_dataloader.set_train()
-    ner_dataloader.set_dev()
-    ner_dataloader.set_test()
+    ner_dataloader.set_train(config['train_path'])
+    ner_dataloader.set_dev(config['dev_path'])
+    ner_dataloader.set_test(config['test_path'])
     ner_dataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder.weights'))
     config['label_size'] = ner_dataloader.label_size
     print()
@@ -96,10 +87,10 @@ def main(device):
     micro_f1_list = []
     for idx in range(1, config['iterations'] + 1):
         print(f"Starting iteration {idx}")
-        train_dataset = NerDataset(ner_dataloader.train_set.data[:128])
+        train_dataset = NerDataset(ner_dataloader.train_set)
         train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, collate_fn=collate_fn)
 
-        val_dataset = NerDataset(ner_dataloader.dev_set.data[:128])
+        val_dataset = NerDataset(ner_dataloader.dev_set)
         val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
 
         model = AGNModel(config).to(device)
@@ -112,10 +103,10 @@ def main(device):
         print(f"Iteration {idx} End.")
         print()
 
-    model = AGNModel(config).to(device)
-    test_dataset = NerDataset(ner_dataloader.dev_set.data[:128])
+    model_class = AGNModel(config).to(device)
+    test_dataset = NerDataset(ner_dataloader.test_set)
     test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
-    avg_loss, acc, macro_f1, micro_f1, report = test_agn_model(model, test_loader, config)
+    avg_loss, acc, macro_f1, micro_f1, report = test_agn_model(model_class, test_loader, config)
 
     print("Test Report:" + "\n")
     print(report)

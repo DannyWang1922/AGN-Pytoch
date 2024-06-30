@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from collections import defaultdict
 
@@ -80,8 +81,6 @@ class Swish(nn.Module):
 
 
 
-
-
 def move_to_device(data, device):
     """Moves all data in the dictionary to the device"""
     for key, value in data.items():
@@ -111,3 +110,46 @@ def clean_str(string):
     string = re.sub(r"\s{2,}", " ", string)
     return string.strip().lower()
 
+def get_save_dir(base_dir_name):
+    # 1. Check if the result directory exists; if not, create it.
+    if not os.path.exists(base_dir_name):
+        os.makedirs(base_dir_name)
+        print(f"The directory '{base_dir_name}' has been created.")
+
+    # 2. Check if there are any subdirectories in the result directory; if not, create result_0.
+    subdirectories = [d for d in os.listdir(base_dir_name) if os.path.isdir(os.path.join(base_dir_name, d))]
+    if not subdirectories:
+        initial_subdir = os.path.join(base_dir_name, f"{os.path.basename(base_dir_name)}_1")
+        os.makedirs(initial_subdir)
+        print(f"The subdirectory '{initial_subdir}' has been created.")
+        return initial_subdir  # Return immediately, as this is the first created subdirectory.
+
+    # 3. Get the directory with the largest index.
+    max_index = -1
+    for subdir in subdirectories:
+        if subdir.startswith(f"{os.path.basename(base_dir_name)}_"):
+            try:
+                index = int(subdir.split("_")[-1])
+                if index > max_index:
+                    max_index = index
+            except ValueError:
+                # If conversion fails, ignore this subdirectory.
+                continue
+
+    # 4. Create the directory result/result_{max_index+1}.
+    next_index = max_index + 1
+    next_subdir = os.path.join(base_dir_name, f"{os.path.basename(base_dir_name)}_{next_index}")
+    os.makedirs(next_subdir)
+    print(f"The subdirectory '{next_subdir}' has been created.")
+
+    # 5. Return the path of the above directory.
+    return next_subdir
+
+
+def read_json(file_path):
+    data = []
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            record = json.loads(line.strip())
+            data.append(record)
+    return data

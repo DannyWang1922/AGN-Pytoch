@@ -60,11 +60,11 @@ class NerMetrics:
         self.history['val_macro_f1'].append(val_macro_f1)
         self.history['val_micro_f1'].append(val_micro_f1)
 
-        # 输出到控制台
         print(f"Epoch {epoch + 1}/{self.epochs}, Loss: {avg_loss:.4f}, val_acc: {val_acc:.4f}, val_macro_f1: {val_macro_f1:.4f}, val_micro_f1: {val_micro_f1:.4f}")
         logging.info(f"Epoch {epoch + 1}/{self.epochs}, Loss: {avg_loss:.4f}, val_acc: {val_acc:.4f}, val_macro_f1: {val_macro_f1:.4f}, val_micro_f1: {val_micro_f1:.4f}")
 
-        if val_macro_f1 > self.best + self.min_delta:
+        # Early stop
+        if round(val_macro_f1, 4) > self.best + self.min_delta:
             self.best = val_macro_f1
             self.wait = 0
             print(f'New best model, save model to {self.save_dir}...')
