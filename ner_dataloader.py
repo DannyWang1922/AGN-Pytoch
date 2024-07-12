@@ -59,7 +59,7 @@ def collate_fn(batch):
                                                       batch_first=True, padding_value=0)
     batch_segment_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
     batch_tfidf = torch.stack(batch_tfidf)
-    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-1)
+    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
 
     return {
         'token_ids': batch_token_ids_padded,
@@ -68,7 +68,6 @@ def collate_fn(batch):
         'attention_mask': attention_masks,
         'label_ids': batch_label_ids_padded
     }
-
 
 def generate_tcol_vectors(all_tokens, all_labels):
     # 提取所有可能的标签
@@ -234,7 +233,7 @@ class NerDataLoader:
                 token_ids.extend(tok["input_ids"][1:-1])
                 tag_ids.extend([tag] * len(tok["input_ids"][1:-1]))
             token_ids = [first] + token_ids[:self.max_len - 2] + [last]
-            tag_ids = [0] + tag_ids[:self.max_len - 2] + [0]
+            tag_ids = [-100] + tag_ids[:self.max_len - 2] + [-100]
             assert len(token_ids) == len(tag_ids)
 
             data.append({

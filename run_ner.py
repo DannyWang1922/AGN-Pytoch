@@ -16,7 +16,7 @@ def check_device():
     """Check for device"""
     if torch.cuda.is_available():
         print("CUDA is available.")
-        device = torch.device("cuda")
+        device = torch.device("cuda:0")
     else:
         print("Using CPU.")
         device = torch.device("cpu")
@@ -55,7 +55,9 @@ def main():
     tokenizer.model_max_length = config['max_len']
 
     print("Load data...")
-    ner_dataloader = NerDataLoader(config['dataset_name'], tokenizer, feature=config["feature"],
+    ner_dataloader = NerDataLoader(config['dataset_name'],
+                                   tokenizer=tokenizer,
+                                   feature=config["feature"],
                                    device=config["device"],
                                    max_len=config['max_len'],
                                    ae_latent_dim=config['ae_latent_dim'], use_vae=config['use_vae'],
@@ -77,8 +79,9 @@ def main():
 
     print("Begin training AGN")
     accuracy_list = []
-    macro_f1_list = []
-    micro_f1_list = []
+    precision_list = []
+    recall_list = []
+    f1_list = []
     for idx in range(1, config['iterations'] + 1):
         print(f"Begin iteration {idx}")
         train_dataset = NerDataset(ner_dataloader.train_set.data[:128])
@@ -92,23 +95,30 @@ def main():
         callback = train_agn_model(model=model, train_loader=train_loader, evl_loader=test_loader, config=config)
 
         max_acc = max(callback.history["val_acc"])
-        max_macro_f1 = max(callback.history["val_macro_f1"])
-        max_micro_f1 = max(callback.history["val_micro_f1"])
+        max_precision = max(callback.history["val_precision"])
+        max_recall = max(callback.history["val_recall"])
+        max_f1 = max(callback.history["val_f1"])
 
         accuracy_list.append(max_acc)
-        macro_f1_list.append(max_macro_f1)
-        micro_f1_list.append(max_micro_f1)
-        print(f"Iteration {idx} finish. acc: {max_acc:.4f}, macro_f1: {max_macro_f1:.4f}, micro_f1: {max_micro_f1:.4f}")
-        logging.info(f"Iteration {idx}: acc: {max_acc:.4f}, macro_f1: {max_macro_f1:.4f}, micro_f1: {max_micro_f1:.4f} \n")
+        precision_list.append(max_precision)
+        recall_list.append(max_recall)
+        f1_list.append(max_f1)
+
+        print(
+            f"Iteration {idx} finish. acc: {max_acc}, precision: {max_precision}, recall: {max_recall}, f1: {max_f1}")
+        logging.info(
+            f"Iteration {idx}: acc: {max_acc}, precision: {max_precision}, recall: {max_recall}, f1: {max_f1} \n")
         print()
 
     avg_accuracy = round(sum(accuracy_list) / len(accuracy_list), 4)
-    avg_macro_f1 = round(sum(macro_f1_list) / len(macro_f1_list), 4)
-    avg_micro_f1 = round(sum(micro_f1_list) / len(micro_f1_list), 4)
+    avg_precision = round(sum(precision_list) / len(precision_list), 4)
+    avg_recall = round(sum(recall_list) / len(recall_list), 4)
+    avg_f1 = round(sum(f1_list) / len(f1_list), 4)
 
     logging.info("avg_accuracy: " + str(avg_accuracy))
-    logging.info("avg_macro_f1: " + str(avg_macro_f1))
-    logging.info("avg_micro_f1: " + str(avg_micro_f1))
+    logging.info("avg_precision: " + str(avg_precision))
+    logging.info("avg_recall: " + str(avg_recall))
+    logging.info("avg_f1: " + str(avg_f1))
 
     logging.info("\n" + str(formatted_json))
 

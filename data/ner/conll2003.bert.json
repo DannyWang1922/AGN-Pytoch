@@ -21,5 +21,5 @@
     "use_agn": false,
     "feature": "tcol",
     "use_sa": false,
-    "decay_steps": 10
+    "decay_steps": 100
 }

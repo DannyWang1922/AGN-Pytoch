@@ -139,6 +139,7 @@ class AGNModel(nn.Module):
                                   return_attention=False)
 
         if self.task == 'clf':
+            self.loss_fn = nn.CrossEntropyLoss()
             self.clf_output_layer = nn.Sequential(
                 nn.Linear(bert_output_feature_size, config.get('hidden_size', 256)),
                 nn.ReLU(),
@@ -147,6 +148,7 @@ class AGNModel(nn.Module):
                 nn.Softmax(dim=-1)
             )
         elif self.task == 'ner':
+            self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
             target_size = config["label_size"]
             device = config["device"]
             self.crf = CRF(target_size, batch_first=True).to(device)
@@ -167,8 +169,8 @@ class AGNModel(nn.Module):
             token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input[
                 "tfidf_vector"], input["attention_mask"]
 
-        bert_output = self.bert(input_ids=token_ids, attention_mask=attention_mask)
-        bert_sequence_output = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
+        bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
+        bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
 
         # 选择输入源
         if self.config.get('use_agn'):
@@ -177,36 +179,35 @@ class AGNModel(nn.Module):
             gi = self.gi_dropout(gi)
             gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
 
-            agn_output = self.agn(bert_sequence_output, gi)
+            agn_output = self.agn(bert_last_hidden_state, gi)
             inter_output = agn_output
         else:
-            inter_output = bert_sequence_output
+            inter_output = bert_last_hidden_state
             if self.config.get('use_sa'):
                 inter_output = self.attn(inter_output)
 
         # 根据任务类型处理输出
         if self.task == 'clf':
             pooled_output = torch.max(inter_output, dim=1)[0]
-            final_output = self.clf_output_layer(pooled_output)
+            preds = self.clf_output_layer(pooled_output)
         elif self.task == 'ner':
             output1 = self.ner_drop(inter_output)
             output2 = self.ner_linear(output1)
-            final_output = self.ner_hidden2tag(output2)
+            preds = self.ner_hidden2tag(output2)
         elif self.task == 'sts':
             # 处理回归任务的输出
             pass
-        return final_output
+        return preds
 
-    def loss_fn(self, outputs, targets, mask=None):
+    def loss(self, outputs, targets):
         if self.task == 'clf':
-            loss_fn = nn.CrossEntropyLoss()
-            loss = loss_fn(outputs, targets)
-        else:
-            if mask is not None:
-                crf_loss = self.crf(outputs, targets, mask)
-            else:
-                crf_loss = self.crf(outputs, targets)
-            loss = crf_loss * -1
+            loss = self.loss_fn(outputs, targets)
+        elif self.task == "ner":
+            # loss = self.loss_fn(outputs.view(-1, outputs.shape[-1]), targets.view(-1))
+            active_loss = targets.view(-1) != -100  # 找到有效的标签
+            active_logits = outputs.view(-1, outputs.shape[-1])[active_loss]
+            active_labels = targets.view(-1)[active_loss]
+            loss = self.loss_fn(active_logits, active_labels)
         return loss
 
 def update_learning_rate(optimizer, decay_rate=0.9):
@@ -240,9 +241,9 @@ def train_agn_model(model, train_loader, evl_loader, config):
             inputs, labels = data, data["label_ids"]
 
             optimizer.zero_grad()
-            output = model(inputs) # output_loss only for CRF
+            preds = model(inputs)
 
-            loss = model.loss_fn(output, labels, inputs["attention_mask"].bool())
+            loss = model.loss(preds, labels)
 
             loss.backward()
             optimizer.step()
@@ -310,7 +311,7 @@ def test_agn_model(model_class, test_loader, config):
 
             if config["task"] == "ner":
                 for i in range(len(labels)):
-                    masked_true_labels = labels[i][labels[i] != -1].cpu().numpy()
+                    masked_true_labels = labels[i][labels[i] != -100].cpu().numpy()
                     y_true.extend(masked_true_labels)
                     y_pred.extend(preds[i])
             else:
@@ -326,3 +327,4 @@ def test_agn_model(model_class, test_loader, config):
     report = classification_report(y_true, y_pred, zero_division=0)
 
     return avg_loss, acc, macro_f1, micro_f1, report
+
