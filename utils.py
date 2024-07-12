@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 from collections import defaultdict
 
@@ -95,7 +96,7 @@ def clean_str(string):
     """
     string = string.replace("\n", "")
     string = string.replace("\t", "")
-    string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+    string = re.sub(r"[^A-Za-z0-9(),!?\'`]", " ", string)
     string = re.sub(r"\'s", " \'s", string)
     string = re.sub(r"\'ve", " \'ve", string)
     string = re.sub(r"n\'t", " n\'t", string)
@@ -153,3 +154,13 @@ def read_json(file_path):
             record = json.loads(line.strip())
             data.append(record)
     return data
+
+def set_seed(seed):
+    random.seed(seed)  # Python Random
+    np.random.seed(seed)  # Numpy
+    torch.manual_seed(seed)  # PyTorch
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False

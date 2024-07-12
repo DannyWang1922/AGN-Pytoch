@@ -41,7 +41,7 @@ def main(device):
     # config_file = args.config
 
     # config_file = "data/sst2/sst2.json"
-    config_file = "data/ner/conll2003.json"
+    config_file = "../data/ner/conll2003.json"
 
     with open(config_file, "r") as reader:
         config = json.load(reader)

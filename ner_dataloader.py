@@ -32,11 +32,18 @@ class NerDataset(Dataset):
 
     def __getitem__(self, idx):
         dic = self.data[idx]
+
+        def to_tensor(data, dtype):
+            if isinstance(data, torch.Tensor):
+                return data.to(dtype)
+            else:
+                return torch.tensor(data, dtype=dtype)
+
         data = {
-            'token_ids': torch.tensor(dic['token_ids'], dtype=torch.long).clone().detach(),
-            'segment_ids': torch.tensor(dic['segment_ids'], dtype=torch.long).clone().detach(),
-            'tfidf_vector': torch.tensor(dic['tfidf_vector'], dtype=torch.float).clone().detach(),
-            'label_ids': torch.tensor(dic['label_ids'], dtype=torch.long).clone().detach()
+            'token_ids': to_tensor(dic['token_ids'], torch.long),
+            'segment_ids': to_tensor(dic['segment_ids'], torch.long),
+            'tfidf_vector': to_tensor(dic['tfidf_vector'], torch.float),
+            'label_ids': to_tensor(dic['label_ids'], torch.long)
         }
         return data
 
@@ -91,6 +98,7 @@ def generate_tcol_vectors(all_tokens, all_labels):
 
     return token_tcol  # {'I': [0.0, 0.0, 1.0], 'live': [0.0, 0.0, 1.0]}
 
+
 def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
     tcol_vectors = []
     for obj in all_tokens:
@@ -130,9 +138,9 @@ class NerDataLoader:
     def save_autoencoder(self, save_path):
         torch.save(self.autoencoder.state_dict(), save_path)
 
-    def load_autoencoder(self, save_path):
-        self.init_autoencoder()
-        self.autoencoder.load_state_dict(torch.load(save_path))
+    def load_autoencoder(self, save_path, in_dims):
+        self.init_autoencoder(in_dims)
+        self.autoencoder.load_state_dict(torch.load(save_path, map_location=torch.device(self.device)))
 
     def set_train(self, train_path):
         self._train_set = self._read_data(train_path, is_train=True)
@@ -174,12 +182,7 @@ class NerDataLoader:
         df_data = pd.DataFrame(data)
         all_tokens = df_data['token_ids'].tolist()
         all_labels = df_data['label_ids'].tolist()
-
         token_tocol = generate_tcol_vectors(all_tokens, all_labels)
-        with open('token_tocol.txt', 'w', encoding='utf-8') as file:
-            for item in token_tocol:
-                file.write(f"{str(item)}\n")
-
         sentence_tocol = sentence_tcol_vectors(all_tokens, token_tocol, max_len=self.max_len)
         return sentence_tocol
 
@@ -192,6 +195,8 @@ class NerDataLoader:
             print("\tAlignment data size:", len(data))
 
         if self.feature == "tfidf":
+            if is_train:
+                self.tfidf_Vectorizer.fit([obj['raw_text'] for obj in data])
             print('\tUsing TF-IDF...')
             X = self.tfidf_Vectorizer.transform([obj['raw_text'] for obj in data]).todense()
             print('\tTF-IDF vector shape:', X.shape)
@@ -238,14 +243,7 @@ class NerDataLoader:
                 'segment_ids': [0] * len(token_ids),
                 'label_ids': tag_ids
             })
-            # fit tf-idf
 
-        if is_train:
-            if self.feature == "tfidf":
-                self.tfidf_Vectorizer.fit(tfidf_corpus)
-            self._label_size = len(all_label_set)
+        self._label_size = len(all_label_set)
         data = self.prepare_stat_feature(data, is_train=is_train)
-
         return data
-
-

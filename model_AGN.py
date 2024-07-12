@@ -1,21 +1,16 @@
-import logging
 import os
-
+import random
+import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 from torch import optim
-from torch.utils.data import Dataset, DataLoader
-import torch
 import torch.nn as nn
 from tqdm import tqdm
-from transformers import BertModel, BertConfig, AdamW
+from transformers import BertModel
 import torch.nn.functional as F
-
 import torch
-from torch.utils.data import Dataset
-
 from clf_metrics import ClfMetrics
 from ner_metrics import NerMetrics
-from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device
+from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device, set_seed
 
 from torchcrf import CRF
 
@@ -92,9 +87,8 @@ class SelfAttention(nn.Module):
 
 
 class AGN(nn.Module):
-    def __init__(self, feature_size, activation='swish', dropout_rate=0.1, valve_rate=0.3, dynamic_valve=False):
+    def __init__(self, feature_size, dropout_rate=0.1, valve_rate=0.3, dynamic_valve=False):
         super(AGN, self).__init__()
-        self.activation = activation
         self.dropout_rate = dropout_rate
         self.valve_rate = valve_rate
         self.dynamic_valve = dynamic_valve
@@ -107,8 +101,6 @@ class AGN(nn.Module):
             self.dynamic_valve_layer = nn.Dropout(1.0 - self.valve_rate)
 
         self.dropout = nn.Dropout(self.dropout_rate)
-        self.attn = SelfAttention(feature_size, activation=self.activation, dropout_rate=self.dropout_rate,
-                                  return_attention=True)
 
     def forward(self, x, gi):
         valve = self.sigmoid(self.valve_transform(x))
@@ -120,8 +112,7 @@ class AGN(nn.Module):
 
         enhanced = x + valve * gi
         enhanced = self.dropout(enhanced)
-        output, attn_weights = self.attn(enhanced)
-        return output, attn_weights
+        return enhanced
 
 
 class AGNModel(nn.Module):
@@ -132,31 +123,37 @@ class AGNModel(nn.Module):
 
         # 加载预训练的 BERT 模型
         self.bert = BertModel.from_pretrained(config['pretrained_model_dir'])
-        feature_size = self.bert.config.hidden_size
+        bert_output_feature_size = self.bert.config.hidden_size
 
         # GI 层
-        self.gi_linear = nn.Linear(self.config["ae_latent_dim"], feature_size)
+        self.gi_linear = nn.Linear(self.config["ae_latent_dim"], bert_output_feature_size)
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
         # AGN 层
-        self.agn = AGN(feature_size=feature_size, activation='swish',
+        self.agn = AGN(feature_size=bert_output_feature_size,
                        dropout_rate=self.config.get('dropout_rate', 0.1),
                        valve_rate=self.config.get('valve_rate', 0.3),
                        dynamic_valve=self.config.get('use_dynamic_valve', False))
 
+        self.attn = SelfAttention(bert_output_feature_size, activation="swish", dropout_rate=config['dropout_rate'],
+                                  return_attention=False)
+
         if self.task == 'clf':
             self.clf_output_layer = nn.Sequential(
-                nn.Linear(feature_size, config.get('hidden_size', 256)),
+                nn.Linear(bert_output_feature_size, config.get('hidden_size', 256)),
                 nn.ReLU(),
                 nn.Dropout(config.get('dropout_rate', 0.1)),
                 nn.Linear(config.get('hidden_size', 256), config['output_size']),
                 nn.Softmax(dim=-1)
             )
         elif self.task == 'ner':
-            self.crf = CRFLayer(config)
-            self.ner_drop = nn.Dropout(config.get('dropout_rate', 0.1))
-            self.ner_linear = nn.Linear(feature_size, config['hidden_size'])
-            self.ner_hidden2tag = nn.Linear(config['hidden_size'], config["label_size"])
+            target_size = config["label_size"]
+            device = config["device"]
+            self.crf = CRF(target_size, batch_first=True).to(device)
+
+            self.ner_drop = nn.Dropout(config['dropout_rate'])
+            self.ner_linear = nn.Linear(bert_output_feature_size, config["hidden_size"])
+            self.ner_hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
 
         elif self.task == 'sts':
             # 定义回归或其他输出层
@@ -170,69 +167,68 @@ class AGNModel(nn.Module):
             token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input[
                 "tfidf_vector"], input["attention_mask"]
 
-        bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
+        bert_output = self.bert(input_ids=token_ids, attention_mask=attention_mask)
         bert_sequence_output = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
 
-        # GI 处理
-        gi = self.gi_linear(gi)
-        gi = self.gi_dropout(gi)
-        gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
-
         # 选择输入源
-        if self.config.get('use_agn', True):
-            agn_output, attn_weight = self.agn(bert_sequence_output, gi)
+        if self.config.get('use_agn'):
+            # GI: 统计特征
+            gi = self.gi_linear(gi)
+            gi = self.gi_dropout(gi)
+            gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
+
+            agn_output = self.agn(bert_sequence_output, gi)
             inter_output = agn_output
         else:
             inter_output = bert_sequence_output
+            if self.config.get('use_sa'):
+                inter_output = self.attn(inter_output)
 
         # 根据任务类型处理输出
         if self.task == 'clf':
             pooled_output = torch.max(inter_output, dim=1)[0]
-            output = self.clf_output_layer(pooled_output)
+            final_output = self.clf_output_layer(pooled_output)
         elif self.task == 'ner':
-            output = self.ner_drop(inter_output)
-            output = self.ner_linear(output)
-            output = self.ner_hidden2tag(output)
+            output1 = self.ner_drop(inter_output)
+            output2 = self.ner_linear(output1)
+            final_output = self.ner_hidden2tag(output2)
+        elif self.task == 'sts':
+            # 处理回归任务的输出
+            pass
+        return final_output
 
-        # elif self.task == 'sts':
-        #     # 处理回归任务的输出
-        #     pass
-        return output
-
-
-class CRFLayer:
-    def __init__(self, config):
-        target_size = config["label_size"]
-        device = config["device"]
-        self.crf = CRF(target_size, batch_first=True).to(device)
-
-    def compute_loss(self, emissions, tags, mask):
-        output = self.crf(emissions, tags, mask.bool())
-        return -output
-
-    def decode(self, emissions, mask):
-        return self.crf.decode(emissions, mask.bool())
-
+    def loss_fn(self, outputs, targets, mask=None):
+        if self.task == 'clf':
+            loss_fn = nn.CrossEntropyLoss()
+            loss = loss_fn(outputs, targets)
+        else:
+            if mask is not None:
+                crf_loss = self.crf(outputs, targets, mask)
+            else:
+                crf_loss = self.crf(outputs, targets)
+            loss = crf_loss * -1
+        return loss
 
 def update_learning_rate(optimizer, decay_rate=0.9):
     for param_group in optimizer.param_groups:
         param_group['lr'] *= decay_rate
 
 
-def train_agn_model(model, train_loader, test_loader, device, config, learning_rate=1e-5):
+def train_agn_model(model, train_loader, evl_loader, config):
     epochs = config["epochs"]
     save_dir = config["save_dir"]
+    learning_rate = config["learning_rate"]
+    device = config["device"]
+    decay_steps = config["decay_steps"]
+
     if config["task"] == "ner":
-        loss_fn = model.crf
-        callback = NerMetrics(model=model, eval_data_loader=test_loader, device=device, save_dir=save_dir,
+        callback = NerMetrics(model=model, eval_data_loader=evl_loader, device=device, save_dir=save_dir,
                               epochs=epochs)
     else:
-        loss_fn = torch.nn.CrossEntropyLoss()
-        callback = ClfMetrics(model, test_loader, device, save_dir, epochs)
+        callback = ClfMetrics(model, evl_loader, device, save_dir, epochs)
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     step = 0
-    decay_steps = 100
 
     for epoch in range(epochs):
         model.train()
@@ -244,13 +240,9 @@ def train_agn_model(model, train_loader, test_loader, device, config, learning_r
             inputs, labels = data, data["label_ids"]
 
             optimizer.zero_grad()
-            outputs = model(inputs)
+            output = model(inputs) # output_loss only for CRF
 
-            if config["task"] == "ner":
-                mask = data["attention_mask"]
-                loss = loss_fn.compute_loss(outputs, labels, mask)
-            else:
-                loss = loss_fn(outputs, labels)
+            loss = model.loss_fn(output, labels, inputs["attention_mask"].bool())
 
             loss.backward()
             optimizer.step()
@@ -276,7 +268,7 @@ def train_agn_model(model, train_loader, test_loader, device, config, learning_r
 
 def test_agn_model(model_class, test_loader, config):
     # 定义模型保存路径
-    model_path = os.path.join(config["save_dir"], "AGN_weights.pth")
+    model_path = os.path.join("ckpts/conll03_bert/conll03_bert_1", "AGN_weights.pth")
 
     # 确保模型文件存在
     if not os.path.exists(model_path):
@@ -285,7 +277,7 @@ def test_agn_model(model_class, test_loader, config):
     device = config["device"]
     # 加载模型
     model = model_class
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
     model.to(device)
     model.eval()
 

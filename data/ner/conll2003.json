@@ -1,14 +1,13 @@
 {
     "dataset_name": "conll2003",
     "max_len": 128,
-    "ae_epochs":30,
+    "ae_epochs":1,
     "ae_latent_dim": 2048,
-    "epochs": 100,
+    "epochs": 1,
     "batch_size": 128,
     "learning_rate": 0.00002,
     "pretrained_model_dir": "pretrained_bert",
     "train_path": "data/ner/train.json",
-    "dev_path": "data/ner/validation.json",
     "test_path": "data/ner/test.json",
     "save_dir": "ckpts/conll03",
     "hidden_size": 256,
@@ -20,5 +19,6 @@
     "use_dynamic_valve": false,
     "use_vae": true,
     "use_agn": true,
-    "feature": "tcol"
+    "feature": "tcol",
+    "decay_steps": 10
 }
