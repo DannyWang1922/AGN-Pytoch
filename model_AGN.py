@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 import numpy as np
@@ -11,8 +12,6 @@ import torch
 from clf_metrics import ClfMetrics
 from ner_metrics import NerMetrics
 from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device, set_seed
-
-from torchcrf import CRF
 
 
 class SelfAttention(nn.Module):
@@ -143,16 +142,12 @@ class AGNModel(nn.Module):
             self.clf_output_layer = nn.Sequential(
                 nn.Linear(bert_output_feature_size, config.get('hidden_size', 256)),
                 nn.ReLU(),
-                nn.Dropout(config.get('dropout_rate', 0.1)),
-                nn.Linear(config.get('hidden_size', 256), config['output_size']),
+                nn.Dropout(config['dropout_rate']),
+                nn.Linear(config["hidden_size"], config['output_size']),
                 nn.Softmax(dim=-1)
             )
         elif self.task == 'ner':
             self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
-            target_size = config["label_size"]
-            device = config["device"]
-            self.crf = CRF(target_size, batch_first=True).to(device)
-
             self.ner_drop = nn.Dropout(config['dropout_rate'])
             self.ner_linear = nn.Linear(bert_output_feature_size, config["hidden_size"])
             self.ner_hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
@@ -172,19 +167,16 @@ class AGNModel(nn.Module):
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
 
+        # GI: 统计特征
+        gi = self.gi_linear(gi)
+        gi = self.gi_dropout(gi)
+        gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
         # 选择输入源
         if self.config.get('use_agn'):
-            # GI: 统计特征
-            gi = self.gi_linear(gi)
-            gi = self.gi_dropout(gi)
-            gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
-
             agn_output = self.agn(bert_last_hidden_state, gi)
-            inter_output = agn_output
+            inter_output = self.attn(agn_output)
         else:
             inter_output = bert_last_hidden_state
-            if self.config.get('use_sa'):
-                inter_output = self.attn(inter_output)
 
         # 根据任务类型处理输出
         if self.task == 'clf':
@@ -203,16 +195,18 @@ class AGNModel(nn.Module):
         if self.task == 'clf':
             loss = self.loss_fn(outputs, targets)
         elif self.task == "ner":
-            # loss = self.loss_fn(outputs.view(-1, outputs.shape[-1]), targets.view(-1))
             active_loss = targets.view(-1) != -100  # 找到有效的标签
             active_logits = outputs.view(-1, outputs.shape[-1])[active_loss]
             active_labels = targets.view(-1)[active_loss]
             loss = self.loss_fn(active_logits, active_labels)
         return loss
 
-def update_learning_rate(optimizer, decay_rate=0.9):
+
+def update_learning_rate(optimizer, decay_rate):
     for param_group in optimizer.param_groups:
         param_group['lr'] *= decay_rate
+        print(">>>Updated learning rate: {}".format(param_group['lr']))
+        logging.info("Updated learning rate: {}".format(param_group['lr']))
 
 
 def train_agn_model(model, train_loader, evl_loader, config):
@@ -221,14 +215,14 @@ def train_agn_model(model, train_loader, evl_loader, config):
     learning_rate = config["learning_rate"]
     device = config["device"]
     decay_steps = config["decay_steps"]
+    weight_decay = config["weight_decay"]
 
     if config["task"] == "ner":
-        callback = NerMetrics(model=model, eval_data_loader=evl_loader, device=device, save_dir=save_dir,
-                              epochs=epochs)
+        callback = NerMetrics(model=model, eval_data_loader=evl_loader, config=config)
     else:
         callback = ClfMetrics(model, evl_loader, device, save_dir, epochs)
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     step = 0
 
     for epoch in range(epochs):
@@ -253,8 +247,7 @@ def train_agn_model(model, train_loader, evl_loader, config):
 
             step += 1
             if step % decay_steps == 0:  # update learning rate
-                update_learning_rate(optimizer)
-                # print(f"Step {step}: Learning rate decayed to {optimizer.param_groups[0]['lr']}")
+                update_learning_rate(optimizer, config["decay_rate"])
 
         avg_loss = total_loss / len(train_loader)
         callback.on_epoch_end(epoch, avg_loss)
@@ -327,4 +320,3 @@ def test_agn_model(model_class, test_loader, config):
     report = classification_report(y_true, y_pred, zero_division=0)
 
     return avg_loss, acc, macro_f1, micro_f1, report
-

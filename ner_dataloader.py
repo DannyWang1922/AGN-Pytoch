@@ -1,21 +1,12 @@
 import pickle
-import os
 from collections import defaultdict
-
 import numpy as np
 import pandas as pd
-import torch
-from datasets import load_dataset
 from sklearn.feature_extraction.text import TfidfVectorizer
 from torch import nn
-from torch.utils.data import Dataset
-
 from model_V_Net import Autoencoder, VariationalAutoencoder
-
 import torch
 from torch.utils.data import Dataset
-from torch.nn.utils.rnn import pad_sequence
-
 from utils import read_json
 
 
@@ -69,6 +60,7 @@ def collate_fn(batch):
         'label_ids': batch_label_ids_padded
     }
 
+
 def generate_tcol_vectors(all_tokens, all_labels):
     # 提取所有可能的标签
     possible_labels = set(label for labels in all_labels for label in labels)
@@ -110,23 +102,20 @@ def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
 
 
 class NerDataLoader:
-    def __init__(self, dataset_name, tokenizer, device, feature, max_len=512, ae_latent_dim=128, use_vae=False,
-                 batch_size=64,
-                 ae_epochs=20):
-        self.dataset_name = dataset_name
-        self.use_vae = use_vae
-        self.batch_size = batch_size
-        self.ae_latent_dim = ae_latent_dim
-        self.ae_epochs = ae_epochs
-        self.train_steps = 0
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        self.pad = '<pad>'
-        self.unk = '<unk>'
-        self.tfidf_Vectorizer = TfidfVectorizer(stop_words='english', min_df=3, max_features=5000)
+    def __init__(self, tokenizer, config):
+        self.ae_epochs = config["ae_epochs"]
+        self.ae_latent_dim = config["ae_latent_dim"]
         self.autoencoder = None
-        self.device = device
-        self.feature = feature
+        self.batch_size = config["batch_size"]
+        self.device = config["device"]
+        self.feature = config["feature"]
+        self.max_len = config["max_len"]
+        self.pad = '<pad>'
+        self.tfidf_Vectorizer = TfidfVectorizer(stop_words='english', min_df=3, max_features=5000)
+        self.tokenizer = tokenizer
+        self.train_steps = 0
+        self.unk = '<unk>'
+        self.use_vae = config["use_vae"]
 
     def load_vocab(self, save_path):
         with open(save_path, 'rb') as reader:
