@@ -11,7 +11,7 @@
     "iterations": 1,
     "learning_rate": 2e-05,
     "max_len": 128,
-    "patience": 50,
+    "patience": 30,
     "pretrained_model_dir": "bert-base-uncased",
     "save_dir": "ckpts/conll03_bert",
     "test_path": "data/ner/test.json",

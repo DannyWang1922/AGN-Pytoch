@@ -29,6 +29,7 @@ def extract_config_and_avg_f1(log_file_path):
         "decay_rate": config.get("decay_rate"),
         "decay_steps": config.get("decay_steps"),
         "learning_rate": config.get("learning_rate"),
+        "valve_rate": config.get("valve_rate"),
         "weight_decay": config.get("weight_decay"),
         "avg_f1": avg_f1,
     }
@@ -75,8 +76,8 @@ def save_to_csv(data, output_csv):
 
 
 if __name__ == "__main__":
-    root_dir = "AGN_Bert_only_res_2"
-    output_csv = "AGN_Bert_only_grid_search_res.csv"
+    root_dir = "AGN_7.22_dropout(0.1)"
+    output_csv = "AGN_7.22_dropout(0.1)_res.csv"
     data = traverse_and_collect_data(root_dir)
     save_to_csv(data, output_csv)
     print(f"Data saved to {output_csv}")

@@ -26,7 +26,7 @@ def check_device():
 def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
-    parser.add_argument('--config', type=str, default="data/ner/conll2003.bert.json")
+    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')
@@ -37,10 +37,6 @@ def main():
 
     set_seed(42)
     device = check_device()
-
-    # Load config
-    # config_file = "data/ner/conll2003.json"
-    # config_file = "data/ner/conll2003.bert.json"
 
     with open(config_file, "r") as reader:
         config = json.load(reader)

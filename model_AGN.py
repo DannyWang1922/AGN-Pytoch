@@ -130,7 +130,7 @@ class AGNModel(nn.Module):
 
         # AGN 层
         self.agn = AGN(feature_size=bert_output_feature_size,
-                       dropout_rate=self.config.get('dropout_rate', 0.1),
+                       dropout_rate=self.config.get('drop_rate', 0.1),
                        valve_rate=self.config.get('valve_rate', 0.3),
                        dynamic_valve=self.config.get('use_dynamic_valve', False))
 

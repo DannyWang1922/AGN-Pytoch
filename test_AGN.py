@@ -30,7 +30,7 @@ def collate_fn(batch):
     }
 
 
-config_file = "data/ner/conll2003.bert.json"
+config_file = "data/ner/conll2003_bert.json"
 with open(config_file, "r") as reader:
     config = json.load(reader)
 config["task"] = "ner"
