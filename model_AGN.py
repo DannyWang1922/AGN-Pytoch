@@ -162,7 +162,7 @@ class AGNModel(nn.Module):
                 input["attention_mask"]
         else:
             token_ids, segment_ids, gi, attention_mask = input["token_ids"], input["segment_ids"], input[
-                "tfidf_vector"], input["attention_mask"]
+                "sf_vector"], input["attention_mask"]
 
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])

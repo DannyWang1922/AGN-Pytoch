@@ -33,7 +33,7 @@ class NerDataset(Dataset):
         data = {
             'token_ids': to_tensor(dic['token_ids'], torch.long),
             'segment_ids': to_tensor(dic['segment_ids'], torch.long),
-            'tfidf_vector': to_tensor(dic['tfidf_vector'], torch.float),
+            'sf_vector': to_tensor(dic['sf_vector'], torch.float),
             'label_ids': to_tensor(dic['label_ids'], torch.long)
         }
         return data
@@ -42,7 +42,7 @@ class NerDataset(Dataset):
 def collate_fn(batch):
     batch_token_ids = [item['token_ids'] for item in batch]
     batch_segment_ids = [item['segment_ids'] for item in batch]
-    batch_tfidf = [item['tfidf_vector'] for item in batch]
+    batch_tfidf = [item['sf_vector'] for item in batch]
     batch_label_ids = [item['label_ids'] for item in batch]
 
     batch_token_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
@@ -55,7 +55,7 @@ def collate_fn(batch):
     return {
         'token_ids': batch_token_ids_padded,
         'segment_ids': batch_segment_ids_padded,
-        'tfidf_vector': batch_tfidf,
+        'sf_vector': batch_tfidf,
         'attention_mask': attention_masks,
         'label_ids': batch_label_ids_padded
     }
@@ -201,7 +201,7 @@ class NerDataLoader:
         # decomposite
         assert len(X) == len(data)
         for x, obj in zip(X, data):
-            obj['tfidf_vector'] = x.tolist()
+            obj['sf_vector'] = x.tolist()
         return data
 
     def _read_data(self, file_path, is_train=False):
