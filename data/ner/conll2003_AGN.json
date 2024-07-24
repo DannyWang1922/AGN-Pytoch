@@ -1,9 +1,9 @@
 {
     "ae_epochs": 1,
     "ae_latent_dim": 2048,
-    "batch_size": 128,
+    "batch_size": 8,
     "decay_rate": 0.85,
-    "decay_steps": 1500,
+    "decay_steps": 3000,
     "dropout_rate": 0.5,
     "epochs": 1,
     "feature": "tcol",

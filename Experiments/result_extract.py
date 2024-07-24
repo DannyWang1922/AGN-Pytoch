@@ -76,8 +76,8 @@ def save_to_csv(data, output_csv):
 
 
 if __name__ == "__main__":
-    root_dir = "AGN_7.22_dropout(0.1)"
-    output_csv = "AGN_7.22_dropout(0.1)_res.csv"
+    root_dir = "Experiment_1.8"
+    output_csv = "Experiment_res_1.8.csv"
     data = traverse_and_collect_data(root_dir)
     save_to_csv(data, output_csv)
     print(f"Data saved to {output_csv}")
