@@ -78,7 +78,7 @@ def main():
                                    config=config)
     ner_dataloader.set_train(config['train_path'])
     ner_dataloader.set_test(config['test_path'])
-    ner_dataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder.weights'))
+    # ner_dataloader.save_autoencoder(os.path.join(config['save_dir'], 'autoencoder.weights'))
     config['label_size'] = ner_dataloader.label_size
     print()
 

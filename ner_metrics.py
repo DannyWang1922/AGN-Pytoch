@@ -77,7 +77,7 @@ class NerMetrics:
             self.wait = 0
             print(f'>>>New best model, save model to {self.save_dir}...')
             logging.info(f'>>>New best model, save model to {self.save_dir}...')
-            torch.save(self.model.state_dict(), os.path.join(self.save_dir, 'AGN_weights.pth'))
+            # torch.save(self.model.state_dict(), os.path.join(self.save_dir, 'AGN_weights.pth'))
         else:
             self.wait += 1
             if self.wait >= self.patience:
