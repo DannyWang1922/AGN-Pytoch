@@ -1,12 +1,18 @@
 import os
 
-# 循环从0到1.0，每个间隔为0.1
-for i in range(0, 55, 5):
-    valve_rate = i * 0.01
-    print()
+# # 循环从0到1.0，每个间隔为0.1
+# for i in range(0, 55, 5):
+#     valve_rate = i * 0.01
+#     print()
+#     print("=================================================================")
+#     print(f"Running experiment with valve_rate={valve_rate}")
+#     os.system(f"python run_ner.py --config data/ner/conll2003_AGN.json --valve_rate {valve_rate}")
+
+seed_list = [12, 37, 52, 67, 80]
+for i in seed_list:
     print("=================================================================")
-    print(f"Running experiment with valve_rate={valve_rate}")
-    os.system(f"python run_ner.py --config data/ner/conll2003_AGN.json --valve_rate {valve_rate}")
+    print(f"Running experiment with seed={i}")
+    os.system(f"python run_ner.py --config data/ner/conll2003_AGN.json --random_seed {i}")
 
 
 # import itertools

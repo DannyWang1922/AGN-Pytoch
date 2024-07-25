@@ -30,13 +30,11 @@ def main():
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')
+    parser.add_argument('--random_seed', type=int, help='random_seed')
     parser.add_argument('--valve_rate', type=float, help='Valve rate parameter')
     parser.add_argument('--weight_decay', type=float, help='Weight decay parameter')
     args = parser.parse_args()
     config_file = args.config
-
-    set_seed(42)
-    device = check_device()
 
     with open(config_file, "r") as reader:
         config = json.load(reader)
@@ -53,6 +51,14 @@ def main():
         config["valve_rate"] = args.valve_rate
     if args.weight_decay is not None:
         config["weight_decay"] = args.weight_decay
+
+    if args.random_seed is not None:
+        random_seed = args.random_seed
+    else:
+        random_seed = 42
+
+    set_seed(random_seed)
+    device = check_device()
 
     formatted_json = json.dumps(config, indent=4, sort_keys=True)
     print("Config:")
@@ -76,7 +82,7 @@ def main():
     config['label_size'] = ner_dataloader.label_size
     print()
 
-    set_seed(42)
+    set_seed(random_seed)
     logging.basicConfig(
         filename=config["save_dir"] + '/ner_results.log',
         level=logging.INFO,
