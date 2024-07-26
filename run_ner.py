@@ -51,9 +51,9 @@ def main():
         config["valve_rate"] = args.valve_rate
     if args.weight_decay is not None:
         config["weight_decay"] = args.weight_decay
-
     if args.random_seed is not None:
         random_seed = args.random_seed
+        config["random_seed"] = random_seed
     else:
         random_seed = 42
 
