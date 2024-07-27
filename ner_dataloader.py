@@ -199,12 +199,12 @@ class NerDataLoader:
             print('\tTCol vector shape:', token_sfs.shape)
 
         if self.use_vae:
-            token_sfs_tensor = torch.from_numpy(token_sfs).to(dtype=torch.float32)
+            token_sfs = torch.from_numpy(token_sfs).to(dtype=torch.float32)
             if is_train:
-                self.init_autoencoder(in_dims=token_sfs_tensor.shape[1])
-                self.autoencoder.trainEncoder(data=token_sfs_tensor, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
-            token_sfs_vae = self.autoencoder.predict(token_sfs_tensor, batch_size=self.batch_size, device=self.device)
-            token_sfs = token_sfs_vae.numpy()
+                self.init_autoencoder(in_dims=token_sfs.shape[1])
+                self.autoencoder.trainEncoder(data=token_sfs, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
+            token_sfs = self.autoencoder.predict(token_sfs, batch_size=self.batch_size, device=self.device)
+
 
         # decomposite
         token_sf_dict = {}
