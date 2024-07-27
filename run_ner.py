@@ -26,7 +26,7 @@ def check_device():
 def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
-    parser.add_argument('--config', type=str, default="data/ner/conll2003_bert.json")
+    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')

@@ -19,6 +19,6 @@
     "use_agn": true,
     "use_dynamic_valve": false,
     "use_vae": false,
-    "valve_rate": 0.4,
+    "valve_rate": 0.5,
     "weight_decay": 0
 }

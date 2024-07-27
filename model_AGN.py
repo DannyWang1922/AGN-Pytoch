@@ -102,14 +102,14 @@ class AGN(nn.Module):
         self.dropout = nn.Dropout(self.dropout_rate)
 
     def forward(self, x, gi):
-        valve = self.sigmoid(self.valve_transform(x))
-        if self.dynamic_valve:
-            valve = self.dynamic_valve_layer(valve)
-        else:
-            valve_mask = (valve > 0.5 - self.valve_rate) & (valve < 0.5 + self.valve_rate)
-            valve = valve * valve_mask.float()
+        softmax_output = F.softmax(x, dim=-1)
+        valve, _ = torch.max(softmax_output, dim=-1)
+        valve_mask = (valve < self.valve_rate)
+        valve_mask_expanded = valve_mask.unsqueeze(-1)
+        valve_mask_expanded = valve_mask_expanded.expand(-1, -1, 9)
 
-        enhanced = x + valve * gi
+        sf = gi * valve_mask_expanded
+        enhanced = x + sf
         enhanced = self.dropout(enhanced)
         return enhanced
 
