@@ -42,63 +42,69 @@ class NerDataset(Dataset):
 def collate_fn(batch):
     batch_token_ids = [item['token_ids'] for item in batch]
     batch_segment_ids = [item['segment_ids'] for item in batch]
-    batch_tfidf = [item['sf_vector'] for item in batch]
+    batch_sf = [item['sf_vector'] for item in batch]
     batch_label_ids = [item['label_ids'] for item in batch]
 
     batch_token_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
     attention_masks = torch.nn.utils.rnn.pad_sequence([torch.ones_like(ids) for ids in batch_token_ids],
                                                       batch_first=True, padding_value=0)
     batch_segment_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
-    batch_tfidf = torch.stack(batch_tfidf)
+    batch_sf_padded = torch.nn.utils.rnn.pad_sequence(batch_sf, batch_first=True, padding_value=0)
     batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
 
     return {
         'token_ids': batch_token_ids_padded,
         'segment_ids': batch_segment_ids_padded,
-        'sf_vector': batch_tfidf,
+        'sf_vector':  batch_sf_padded,
         'attention_mask': attention_masks,
         'label_ids': batch_label_ids_padded
     }
 
 
-def generate_tcol_vectors(all_tokens, all_labels):
+def generate_token_tcol_vectors(all_tokens, all_labels):
     # 提取所有可能的标签
-    possible_labels = set(label for labels in all_labels for label in labels)
+    possible_labels = set(label for labels in all_labels for label in labels if
+                          label not in [-100])  # Remove padding label
     token_label_counts = defaultdict(lambda: defaultdict(int))
     num_labels = len(possible_labels)
 
-    # 扁平化token和标签列表
-    tokens = [word_token for sentence_token in all_tokens for word_token in sentence_token]
-    labels = [word_label for sentence_token in all_labels for word_label in sentence_token]
+    # 扁平化token和标签列表，忽略101、102和-100
+    tokens = [word_token for sentence_token in all_tokens for word_token in sentence_token if
+              word_token not in [101, 102]]
+    labels = [word_label for sentence_token in all_labels for word_label in sentence_token if
+              word_label not in [-100]]
 
     # 统计每个token对应的标签频率
     for token, label in zip(tokens, labels):
         token_label_counts[token][label] += 1
 
     # 生成TCol向量
-    token_tcol = {}
-    token_tcol[0] = np.array([0] * num_labels)  # pad
-    token_tcol[1] = np.array([0] * num_labels)  # unk
-    token_tcol[0] = np.reshape(token_tcol[0], (1, -1))
-    token_tcol[1] = np.reshape(token_tcol[1], (1, -1))
-
+    token_tcol_dict = {}
     for token, label_counts in token_label_counts.items():
         total_counts = sum(label_counts.values())
         vector = [label_counts[label] / total_counts for label in sorted(possible_labels)]
-        token_tcol[token] = np.reshape(np.array(vector), (1, -1))
+        token_tcol_dict[token] = vector
 
-    return token_tcol  # {'I': [0.0, 0.0, 1.0], 'live': [0.0, 0.0, 1.0]}
+    return token_tcol_dict  # {'I': [0.0, 0.0, 1.0], 'live': [0.0, 0.0, 1.0]}
 
 
-def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
-    tcol_vectors = []
-    for obj in all_tokens:
-        padded = [0] * (max_len - len(obj))
-        token_ids = obj + padded
-        tcol_vector = np.concatenate([token_tcol.get(token, token_tcol[1]) for token in token_ids[:max_len]])
-        tcol_vector = np.reshape(tcol_vector, (-1))
-        tcol_vectors.append(tcol_vector)
-    return np.array(tcol_vectors)
+# def sentence_tcol_vectors(all_tokens, token_tcol, max_len=128):
+#     tcol_vectors = []
+#     for obj in all_tokens:
+#         padded = [0] * (max_len - len(obj))
+#         token_ids = obj + padded
+#         tcol_vector = np.concatenate([token_tcol.get(token, token_tcol[1]) for token in token_ids[:max_len]])
+#         tcol_vector = np.reshape(tcol_vector, (-1))
+#         tcol_vectors.append(tcol_vector)
+#     return np.array(tcol_vectors)
+
+def generate_tcol_matrix(token_tcol_dict):
+    token_ids = list(token_tcol_dict.keys())
+    tcol_list = [token_tcol_dict[token_id] for token_id in token_ids]
+    tcol_matrix = np.stack(tcol_list)
+    return token_ids, tcol_matrix
+
+
 
 
 class NerDataLoader:
@@ -159,8 +165,8 @@ class NerDataLoader:
         # 根据self.use_vae决定初始化哪种自动编码器，需要自行定义Autoencoder和VariationalAutoencoder类
         if self.autoencoder is None:
             if self.use_vae:
-                self.autoencoder = VariationalAutoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim,
-                                                          hidden_dim=128, activation=nn.ReLU())
+                self.autoencoder = VariationalAutoencoder(input_dim=in_dims, latent_dim=4,
+                                                          hidden_dim=4, activation=nn.ReLU())
             else:
                 self.autoencoder = Autoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim, hidden_dim=128,
                                                activation=nn.ReLU())
@@ -170,17 +176,16 @@ class NerDataLoader:
         df_data = pd.DataFrame(data)
         all_tokens = df_data['token_ids'].tolist()
         all_labels = df_data['label_ids'].tolist()
-        token_tocol = generate_tcol_vectors(all_tokens, all_labels)
-        sentence_tocol = sentence_tcol_vectors(all_tokens, token_tocol, max_len=self.max_len)
-        return sentence_tocol
+        token_tocol = generate_token_tcol_vectors(all_tokens, all_labels)
+        token_ids, tcol_matrix = generate_tcol_matrix(token_tocol)
+        return token_ids, tcol_matrix
 
     def prepare_stat_feature(self, data, is_train=False):
-        if self.use_vae:
-            print("Batch alignment...")
-            print("\tPrevious data size:", len(data))
-            keep_size = len(data) // self.batch_size
-            data = data[:keep_size * self.batch_size]
-            print("\tAlignment data size:", len(data))
+        print("Batch alignment...")
+        print("\tPrevious data size:", len(data))
+        keep_size = len(data) // self.batch_size
+        data = data[:keep_size * self.batch_size]
+        print("\tAlignment data size:", len(data))
 
         if self.feature == "tfidf":
             if is_train:
@@ -190,18 +195,32 @@ class NerDataLoader:
             print('\tTF-IDF vector shape:', X.shape)
         elif self.feature == "tcol":
             print('\tUsing TCol...')
-            X = self.get_tcol_feature(data)
-            print('\tTCol vector shape:', X.shape)
-        X = torch.from_numpy(X).to(dtype=torch.float32)
+            token_ids, token_sfs = self.get_tcol_feature(data)
+            print('\tTCol vector shape:', token_sfs.shape)
 
-        if is_train:
-            self.init_autoencoder(in_dims=X.shape[1])
-            self.autoencoder.trainEncoder(data=X, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
-        X = self.autoencoder.predict(X, batch_size=self.batch_size, device=self.device)
+        if self.use_vae:
+            token_sfs_tensor = torch.from_numpy(token_sfs).to(dtype=torch.float32)
+            if is_train:
+                self.init_autoencoder(in_dims=token_sfs_tensor.shape[1])
+                self.autoencoder.trainEncoder(data=token_sfs_tensor, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
+            token_sfs_vae = self.autoencoder.predict(token_sfs_tensor, batch_size=self.batch_size, device=self.device)
+            token_sfs = token_sfs_vae.numpy()
+
         # decomposite
-        assert len(X) == len(data)
-        for x, obj in zip(X, data):
-            obj['sf_vector'] = x.tolist()
+        token_sf_dict = {}
+        for i, token_id in enumerate(token_ids):
+            token_sf_dict[token_id] = token_sfs[i]
+
+        for sentence in data:
+            token_ids = sentence['token_ids']
+            sentence_sf = []
+            for token_id in token_ids:
+                if token_id not in [101, 102]:
+                    token_sf_vector = token_sf_dict.get(token_id)
+                    sentence_sf.append(token_sf_vector.tolist())
+                else:
+                    sentence_sf.append([0] * 9)
+            sentence["sf_vector"] = sentence_sf
         return data
 
     def _read_data(self, file_path, is_train=False):

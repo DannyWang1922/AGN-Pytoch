@@ -19,17 +19,18 @@ from torch.nn.utils.rnn import pad_sequence
 
 class Sampling(nn.Module):
     """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
+
     def forward(self, z_mean, z_log_var):
         batch = z_mean.size()[0]
         dim = z_mean.size()[1]
         epsilon = torch.randn(batch, dim, device=z_mean.device)
         return z_mean + torch.exp(0.5 * z_log_var) * epsilon
 
+
 # VAE
 class VaeEncoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim, activation):
         super(VaeEncoder, self).__init__()
-
         self.encoder_linear = nn.Linear(input_dim, hidden_dim)
         self.z_mean = nn.Linear(hidden_dim, latent_dim)
         self.z_log_var = nn.Linear(hidden_dim, latent_dim)
@@ -45,7 +46,7 @@ class VaeEncoder(nn.Module):
 
 
 class VaeDecoder(nn.Module):
-    def __init__(self, input_dim, latent_dim):
+    def __init__(self, latent_dim, input_dim):
         super(VaeDecoder, self).__init__()
         self.decoder_linear = nn.Linear(latent_dim, input_dim)
         self.sigmoid = nn.Sigmoid()
@@ -67,7 +68,7 @@ class VariationalAutoencoder(nn.Module):
     def __init__(self, input_dim, latent_dim, hidden_dim, activation=nn.ReLU()):
         super(VariationalAutoencoder, self).__init__()
         self.encoder = VaeEncoder(input_dim, hidden_dim, latent_dim, activation)
-        self.decoder = VaeDecoder(input_dim, latent_dim)
+        self.decoder = VaeDecoder(latent_dim, input_dim)
 
     def forward(self, x):
         encoded, z_mean, z_log_var = self.encoder(x)
@@ -94,16 +95,17 @@ class VariationalAutoencoder(nn.Module):
     def predict(self, data, batch_size, device):
         data_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
         self.eval()
-        all_encoded = []
+        all_decoded = []
 
         with torch.no_grad():
             for x in data_loader:
                 x = x.to(device)
                 encoded, z_mean, z_log_var = self.encoder.forward(x)
-                all_encoded.append(encoded)
+                decoded = self.decoder(encoded)
+                all_decoded.append(decoded)
 
-        all_encoded = torch.cat(all_encoded, dim=0)
-        return all_encoded
+        all_decoded = torch.cat(all_decoded, dim=0)
+        return all_decoded
 
 
 # AutoEncoder
@@ -132,5 +134,3 @@ class Autoencoder(nn.Module):
                 loss.backward()
                 optimizer.step()
             print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
-
-

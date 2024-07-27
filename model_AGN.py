@@ -129,12 +129,12 @@ class AGNModel(nn.Module):
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
         # AGN 层
-        self.agn = AGN(feature_size=bert_output_feature_size,
+        self.agn = AGN(feature_size=9,
                        dropout_rate=0.1,
                        valve_rate=self.config.get('valve_rate', 0.3),
                        dynamic_valve=self.config.get('use_dynamic_valve', False))
 
-        self.attn = SelfAttention(bert_output_feature_size, activation="swish", dropout_rate=config['dropout_rate'],
+        self.attn = SelfAttention(9, activation="swish", dropout_rate=config['dropout_rate'],
                                   return_attention=False)
 
         if self.task == 'clf':
@@ -167,28 +167,17 @@ class AGNModel(nn.Module):
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
 
-        # GI: 统计特征
-        gi = self.gi_linear(gi)
-        gi = self.gi_dropout(gi)
-        gi = gi.unsqueeze(1)  # 扩展维度以匹配序列维度 gi shape: torch.Size([64, 1, 768])
-        # 选择输入源
-        if self.config.get('use_agn'):
-            agn_output = self.agn(bert_last_hidden_state, gi)
-            inter_output = self.attn(agn_output)
-        else:
-            inter_output = bert_last_hidden_state
+        output1 = self.ner_drop(bert_last_hidden_state)
+        output2 = self.ner_linear(output1)
+        token_emb = self.ner_hidden2tag(output2)
 
-        # 根据任务类型处理输出
-        if self.task == 'clf':
-            pooled_output = torch.max(inter_output, dim=1)[0]
-            preds = self.clf_output_layer(pooled_output)
-        elif self.task == 'ner':
-            output1 = self.ner_drop(inter_output)
-            output2 = self.ner_linear(output1)
-            preds = self.ner_hidden2tag(output2)
-        elif self.task == 'sts':
-            # 处理回归任务的输出
-            pass
+        if self.config.get('use_agn'):
+            agn_output = self.agn(token_emb, gi)
+            preds = self.attn(agn_output)
+        else:
+            preds = token_emb
+            print("Test")
+
         return preds
 
     def loss(self, outputs, targets):

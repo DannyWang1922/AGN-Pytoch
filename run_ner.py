@@ -26,7 +26,7 @@ def check_device():
 def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
-    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN.json")
+    parser.add_argument('--config', type=str, default="data/ner/conll2003_bert.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')
@@ -99,7 +99,7 @@ def main():
     for idx in range(1, config['iterations'] + 1):
         print(f"Begin iteration {idx}")
         train_dataset = NerDataset(ner_dataloader.train_set.data[:32])
-        train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, collate_fn=collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
 
         test_dataset = NerDataset(ner_dataloader.test_set.data[:32])
         test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
