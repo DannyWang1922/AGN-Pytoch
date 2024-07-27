@@ -176,7 +176,6 @@ class AGNModel(nn.Module):
             preds = self.attn(agn_output)
         else:
             preds = token_emb
-            print("Test")
 
         return preds
 
