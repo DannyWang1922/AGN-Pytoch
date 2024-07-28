@@ -1,15 +1,12 @@
 import argparse
 import json
-import random
 import torch
 from transformers import BertTokenizer
-from ner_dataloader import NerDataLoader, NerDataset, collate_fn
+from ner_dataloader import NerDataLoader, NerDataset
 from model_AGN import AGNModel, train_agn_model, test_agn_model
 from torch.utils.data import DataLoader
-import numpy as np
-import os
 import logging
-from utils import get_save_dir, set_seed
+from utils import get_save_dir, set_seed, collate_fn
 
 
 def check_device():

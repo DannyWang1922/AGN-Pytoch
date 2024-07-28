@@ -18,7 +18,7 @@
     "train_path": "data/ner/train.json",
     "use_agn": false,
     "use_dynamic_valve": false,
-    "use_vae": true,
+    "use_vae": false,
     "valve_rate": 0.0,
     "weight_decay": 0
 }

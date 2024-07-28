@@ -101,11 +101,12 @@ class AGN(nn.Module):
 
         self.dropout = nn.Dropout(self.dropout_rate)
 
-    def forward(self, x, gi):
+    def forward(self, x, gi):  # x: bert output; gi: statistical feature
         softmax_output = F.softmax(x, dim=-1)
-        valve, _ = torch.max(softmax_output, dim=-1)
-        valve_mask = (valve < self.valve_rate)
-        valve_mask_expanded = valve_mask.unsqueeze(-1)
+        valve, _ = torch.max(softmax_output, dim=-1)  # The max value in each token label vector
+
+        valve_mask = (valve < self.valve_rate)  # [batch_size, num_token]
+        valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, num_token, num_label]
         valve_mask_expanded = valve_mask_expanded.expand(-1, -1, 9)
 
         sf = gi * valve_mask_expanded
@@ -120,15 +121,15 @@ class AGNModel(nn.Module):
         self.config = config
         self.task = config["task"]
 
-        # 加载预训练的 BERT 模型
+        # pretrained bert
         self.bert = BertModel.from_pretrained(config['pretrained_model_dir'])
         bert_output_feature_size = self.bert.config.hidden_size
 
-        # GI 层
+        # GI (statistical feature)
         self.gi_linear = nn.Linear(self.config["ae_latent_dim"], bert_output_feature_size)
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
-        # AGN 层
+        # AGN (valve gate)
         self.agn = AGN(feature_size=9,
                        dropout_rate=0.1,
                        valve_rate=self.config.get('valve_rate', 0.3),

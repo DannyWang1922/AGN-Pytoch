@@ -1,10 +1,10 @@
 import logging
-import os
 from collections import defaultdict
 import torch
 from sklearn.preprocessing import MultiLabelBinarizer
 from utils import move_to_device
 from seqeval.metrics import accuracy_score, precision_score, recall_score, f1_score
+import torch.nn.functional as F
 
 
 class NerMetrics:
@@ -22,10 +22,6 @@ class NerMetrics:
         self.stopped_epoch = 0
         self.epochs = config["epochs"]
 
-        labels = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-        self.mlb = MultiLabelBinarizer(classes=labels)
-        self.mlb.fit(labels)  # 确保所有可能的标签都被考虑
-
         self.label2id = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7,
                          'I-MISC': 8}
         self.id2label = {0: 'O', 1: 'B-PER', 2: 'I-PER', 3: 'B-ORG', 4: 'I-ORG', 5: 'B-LOC', 6: 'I-LOC', 7: 'B-MISC',
@@ -41,7 +37,8 @@ class NerMetrics:
                 outputs = self.model(inputs)
 
                 # Apply softmax to get probabilities and then argmax to get the predicted labels
-                preds = torch.argmax(outputs, dim=-1)
+                probs = F.softmax(outputs, dim=-1)
+                preds = torch.argmax(probs, dim=-1)
 
                 for i in range(len(true_labels)):
                     # Apply mask to remove -1 padded true labels and corresponding predictions

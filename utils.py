@@ -81,7 +81,6 @@ class Swish(nn.Module):
         return x * torch.sigmoid(self.beta * x)
 
 
-
 def move_to_device(data, device):
     """Moves all data in the dictionary to the device"""
     for key, value in data.items():
@@ -110,6 +109,7 @@ def clean_str(string):
     string = re.sub(r"\?", " ? ", string)
     string = re.sub(r"\s{2,}", " ", string)
     return string.strip().lower()
+
 
 def get_save_dir(base_dir_name):
     # 1. Check if the result directory exists; if not, create it.
@@ -155,6 +155,7 @@ def read_json(file_path):
             data.append(record)
     return data
 
+
 def set_seed(seed):
     random.seed(seed)  # Python Random
     np.random.seed(seed)  # Numpy
@@ -164,3 +165,26 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+
+def collate_fn(batch):
+    batch_token_ids = [item['token_ids'] for item in batch]
+    batch_segment_ids = [item['segment_ids'] for item in batch]
+    batch_sf = [item['sf_vector'] for item in batch]
+    batch_label_ids = [item['label_ids'] for item in batch]
+
+    # Padding
+    batch_token_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
+    attention_masks = torch.nn.utils.rnn.pad_sequence([torch.ones_like(ids) for ids in batch_token_ids],
+                                                      batch_first=True, padding_value=0)
+    batch_segment_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
+    batch_sf_padded = torch.nn.utils.rnn.pad_sequence(batch_sf, batch_first=True, padding_value=0)
+    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
+
+    return {
+        'token_ids': batch_token_ids_padded,
+        'segment_ids': batch_segment_ids_padded,
+        'sf_vector': batch_sf_padded,
+        'attention_mask': attention_masks,
+        'label_ids': batch_label_ids_padded
+    }

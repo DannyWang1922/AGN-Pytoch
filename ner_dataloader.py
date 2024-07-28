@@ -39,28 +39,6 @@ class NerDataset(Dataset):
         return data
 
 
-def collate_fn(batch):
-    batch_token_ids = [item['token_ids'] for item in batch]
-    batch_segment_ids = [item['segment_ids'] for item in batch]
-    batch_sf = [item['sf_vector'] for item in batch]
-    batch_label_ids = [item['label_ids'] for item in batch]
-
-    batch_token_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_token_ids, batch_first=True, padding_value=0)
-    attention_masks = torch.nn.utils.rnn.pad_sequence([torch.ones_like(ids) for ids in batch_token_ids],
-                                                      batch_first=True, padding_value=0)
-    batch_segment_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
-    batch_sf_padded = torch.nn.utils.rnn.pad_sequence(batch_sf, batch_first=True, padding_value=0)
-    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
-
-    return {
-        'token_ids': batch_token_ids_padded,
-        'segment_ids': batch_segment_ids_padded,
-        'sf_vector':  batch_sf_padded,
-        'attention_mask': attention_masks,
-        'label_ids': batch_label_ids_padded
-    }
-
-
 def generate_token_tcol_vectors(all_tokens, all_labels):
     # 提取所有可能的标签
     possible_labels = set(label for labels in all_labels for label in labels if
@@ -205,8 +183,6 @@ class NerDataLoader:
                 self.autoencoder.trainEncoder(data=token_sfs, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
             token_sfs = self.autoencoder.predict(token_sfs, batch_size=self.batch_size, device=self.device)
 
-
-        # decomposite
         token_sf_dict = {}
         for i, token_id in enumerate(token_ids):
             token_sf_dict[token_id] = token_sfs[i]
@@ -215,22 +191,21 @@ class NerDataLoader:
             token_ids = sentence['token_ids']
             sentence_sf = []
             for token_id in token_ids:
-                if token_id not in [101, 102]:
+                if token_id in [101, 102]:
+                    sentence_sf.append([0] * 9)
+                else:
                     token_sf_vector = token_sf_dict.get(token_id)
                     sentence_sf.append(token_sf_vector.tolist())
-                else:
-                    sentence_sf.append([0] * 9)
             sentence["sf_vector"] = sentence_sf
+
         return data
 
     def _read_data(self, file_path, is_train=False):
         dataset = read_json(file_path)
         data = []
-        tfidf_corpus = []
         all_label_set = set()
         for obj in dataset:
             raw_text = ' '.join(obj['tokens'])
-            tfidf_corpus.append(raw_text)
             first, last = None, None
             token_ids, tag_ids = [], []
             for i, (tag, token) in enumerate(zip(obj['ner_tags'], obj['tokens'])):
@@ -243,7 +218,6 @@ class NerDataLoader:
             token_ids = [first] + token_ids[:self.max_len - 2] + [last]
             tag_ids = [-100] + tag_ids[:self.max_len - 2] + [-100]
             assert len(token_ids) == len(tag_ids)
-
             data.append({
                 'raw_text': raw_text,
                 'token_ids': token_ids,
