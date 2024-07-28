@@ -6,7 +6,7 @@
     "decay_rate": 0.85,
     "decay_steps": 3000,
     "dropout_rate": 0.5,
-    "epochs": 50,
+    "epochs": 1,
     "feature": "tcol",
     "hidden_size": 256,
     "iterations": 1,

@@ -22,10 +22,12 @@ def check_device():
 
 def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
+    parser.add_argument('--ae_epochs', type=int)
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
     parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
+    parser.add_argument('--epochs', type=int)
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')
     parser.add_argument('--random_seed', type=int, default=42, help='random_seed')
     parser.add_argument('--use_sigmoid', type=bool, help='use sigmoid or softmax')
@@ -39,9 +41,8 @@ def main():
     with open(config_file, "r") as reader:
         config = json.load(reader)
 
-    config_params = ['batch_size', 'decay_steps', 'decay_rate', 'learning_rate', "random_seed"
-                     'use_sigmoid', 'valve_rate_sigmoid', 'valve_rate_softmax',
-                     'v_net', 'weight_decay']
+    config_params = ['ae_epochs', 'batch_size', 'decay_steps', 'decay_rate', 'epochs', 'learning_rate', 'random_seed',
+                     'use_sigmoid', 'valve_rate_sigmoid', 'valve_rate_softmax', 'v_net', 'weight_decay']
 
     for param in config_params:
         arg_value = getattr(args, param)
