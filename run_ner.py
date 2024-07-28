@@ -12,8 +12,8 @@ from utils import get_save_dir, set_seed, collate_fn
 def check_device():
     """Check for device"""
     if torch.cuda.is_available():
-        print("CUDA is available.")
         device = torch.device("cuda:0")
+        print(f"Using {device}")
     else:
         print("Using CPU.")
         device = torch.device("cpu")
