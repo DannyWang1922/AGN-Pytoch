@@ -20,7 +20,7 @@
     "train_path": "data/ner/train.json",
     "use_agn": true,
     "use_dynamic_valve": false,
-    "use_sigmoid": true,
+    "use_sigmoid": false,
     "v_net": "ae",
     "valve_rate_sigmoid": 0.4,
     "valve_rate_softmax": 0.5,
