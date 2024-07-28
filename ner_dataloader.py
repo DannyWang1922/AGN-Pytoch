@@ -1,3 +1,4 @@
+import logging
 import pickle
 from collections import defaultdict
 import numpy as np
@@ -83,11 +84,10 @@ def generate_tcol_matrix(token_tcol_dict):
     return token_ids, tcol_matrix
 
 
-
-
 class NerDataLoader:
     def __init__(self, tokenizer, config):
         self.ae_epochs = config["ae_epochs"]
+        self.ae_hidden_dim = config["ae_hidden_dim"]
         self.ae_latent_dim = config["ae_latent_dim"]
         self.autoencoder = None
         self.batch_size = config["batch_size"]
@@ -99,7 +99,7 @@ class NerDataLoader:
         self.tokenizer = tokenizer
         self.train_steps = 0
         self.unk = '<unk>'
-        self.use_vae = config["use_vae"]
+        self.v_net = config["v_net"]
 
     def load_vocab(self, save_path):
         with open(save_path, 'rb') as reader:
@@ -140,14 +140,19 @@ class NerDataLoader:
         return self._label_size
 
     def init_autoencoder(self, in_dims):
-        # 根据self.use_vae决定初始化哪种自动编码器，需要自行定义Autoencoder和VariationalAutoencoder类
         if self.autoencoder is None:
-            if self.use_vae:
-                self.autoencoder = VariationalAutoencoder(input_dim=in_dims, latent_dim=4,
-                                                          hidden_dim=4, activation=nn.ReLU())
-            else:
-                self.autoencoder = Autoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim, hidden_dim=128,
+            if self.v_net == "ae":
+                self.autoencoder = Autoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim,
+                                               hidden_dim=self.ae_hidden_dim,
                                                activation=nn.ReLU())
+                print("V-net: AE")
+                logging.info("V-net: AE")
+            elif self.v_net == "vae":
+                self.autoencoder = VariationalAutoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim,
+                                                          hidden_dim=self.ae_hidden_dim,
+                                                          activation=nn.ReLU())
+                print("V-net: VAE")
+                logging.info("V-net: VAE")
             self.autoencoder = self.autoencoder.to(self.device)
 
     def get_tcol_feature(self, data):
@@ -176,12 +181,17 @@ class NerDataLoader:
             token_ids, token_sfs = self.get_tcol_feature(data)
             print('\tTCol vector shape:', token_sfs.shape)
 
-        if self.use_vae:
-            token_sfs = torch.from_numpy(token_sfs).to(dtype=torch.float32)
+        token_sfs = torch.from_numpy(token_sfs).to(dtype=torch.float32)
+
+        if (self.v_net == "ae") or (self.v_net == "vae"):
             if is_train:
                 self.init_autoencoder(in_dims=token_sfs.shape[1])
-                self.autoencoder.trainEncoder(data=token_sfs, batch_size=self.batch_size, epochs=self.ae_epochs, device=self.device)
+                self.autoencoder.trainEncoder(data=token_sfs, batch_size=self.batch_size, epochs=self.ae_epochs,
+                                              device=self.device)
             token_sfs = self.autoencoder.predict(token_sfs, batch_size=self.batch_size, device=self.device)
+        else:
+            print("V-net: none")
+            logging.info("V-net: none")
 
         token_sf_dict = {}
         for i, token_id in enumerate(token_ids):

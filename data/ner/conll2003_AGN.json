@@ -1,12 +1,13 @@
 {
     "ae_epochs": 10,
-    "ae_latent_dim": 2048,
+    "ae_hidden_dim": 32,
+    "ae_latent_dim": 16,
     "batch_size": 8,
     "decay_rate": 0.85,
     "decay_steps": 3000,
     "dropout_rate": 0.5,
     "epochs": 50,
-    "feature": "tfidf",
+    "feature": "tcol",
     "hidden_size": 256,
     "iterations": 1,
     "learning_rate": 2e-05,
@@ -18,7 +19,7 @@
     "train_path": "data/ner/train.json",
     "use_agn": true,
     "use_dynamic_valve": false,
-    "use_vae": false,
+    "v_net": "ae",
     "valve_rate": 0.5,
     "weight_decay": 0
 }
