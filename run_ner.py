@@ -27,8 +27,11 @@ def main():
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--learning_rate', type=float, help='Learning rate parameter')
-    parser.add_argument('--random_seed', type=int, help='random_seed')
-    parser.add_argument('--valve_rate', type=float, help='Valve rate parameter')
+    parser.add_argument('--random_seed', type=int, default=42, help='random_seed')
+    parser.add_argument('--use_sigmoid', type=bool, help='use sigmoid or softmax')
+    parser.add_argument('--valve_rate_sigmoid', type=float, help='Valve rate parameter')
+    parser.add_argument('--valve_rate_softmax', type=float, help='Valve rate parameter')
+    parser.add_argument('--v_net', type=float, help='use vae or ae or nothing')
     parser.add_argument('--weight_decay', type=float, help='Weight decay parameter')
     args = parser.parse_args()
     config_file = args.config
@@ -36,25 +39,16 @@ def main():
     with open(config_file, "r") as reader:
         config = json.load(reader)
 
-    if args.learning_rate is not None:
-        config["learning_rate"] = args.learning_rate
-    if args.batch_size is not None:
-        config["batch_size"] = args.batch_size
-    if args.decay_steps is not None:
-        config["decay_steps"] = args.decay_steps
-    if args.decay_rate is not None:
-        config["decay_rate"] = args.decay_rate
-    if args.valve_rate is not None:
-        config["valve_rate"] = args.valve_rate
-    if args.weight_decay is not None:
-        config["weight_decay"] = args.weight_decay
-    if args.random_seed is not None:
-        random_seed = args.random_seed
-        config["random_seed"] = random_seed
-    else:
-        random_seed = 42
+    config_params = ['batch_size', 'decay_steps', 'decay_rate', 'learning_rate', "random_seed"
+                     'use_sigmoid', 'valve_rate_sigmoid', 'valve_rate_softmax',
+                     'v_net', 'weight_decay']
 
-    set_seed(random_seed)
+    for param in config_params:
+        arg_value = getattr(args, param)
+        if arg_value is not None:
+            config[param] = arg_value
+
+    set_seed(config['random_seed'])
     device = check_device()
 
     formatted_json = json.dumps(config, indent=4, sort_keys=True)
@@ -79,7 +73,7 @@ def main():
     config['label_size'] = ner_dataloader.label_size
     print()
 
-    set_seed(random_seed)
+    set_seed(config["random_seed"])
     logging.basicConfig(
         filename=config["save_dir"] + '/ner_results.log',
         level=logging.INFO,

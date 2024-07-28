@@ -86,14 +86,17 @@ class SelfAttention(nn.Module):
 
 
 class AGN(nn.Module):
-    def __init__(self, feature_size, dropout_rate=0.1, valve_rate=0.3, dynamic_valve=False):
+    def __init__(self, feature_size, dropout_rate=0.1, config=None):
         super(AGN, self).__init__()
         self.dropout_rate = dropout_rate
-        self.valve_rate = valve_rate
-        self.dynamic_valve = dynamic_valve
+        self.valve_rate_sigmoid = config["valve_rate_sigmoid"]
+        self.valve_rate_softmax = config["valve_rate_softmax"]
+        self.dynamic_valve = config["use_dynamic_valve"]
 
         self.valve_transform = nn.Linear(feature_size, feature_size, bias=False)
         self.sigmoid = nn.Sigmoid()
+
+        self.use_sigmoid = config["use_sigmoid"]
 
         # 动态阀门调整
         if self.dynamic_valve:
@@ -102,16 +105,26 @@ class AGN(nn.Module):
         self.dropout = nn.Dropout(self.dropout_rate)
 
     def forward(self, x, gi):  # x: bert output; gi: statistical feature
-        softmax_output = F.softmax(x, dim=-1)
-        valve, _ = torch.max(softmax_output, dim=-1)  # The max value in each token label vector
+        if self.use_sigmoid:
+            valve = self.sigmoid(self.valve_transform(x))
+            if self.dynamic_valve:
+                valve = self.dynamic_valve_layer(valve)
+            else:
+                valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
+                valve = valve * valve_mask.float()
+            enhanced = x + valve * gi
+        else:
+            softmax_output = F.softmax(x, dim=-1)
+            valve, _ = torch.max(softmax_output, dim=-1)  # The max value in each token label vector
 
-        valve_mask = (valve < self.valve_rate)  # [batch_size, num_token]
-        valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, num_token, num_label]
-        valve_mask_expanded = valve_mask_expanded.expand(-1, -1, 9)
+            valve_mask = (valve < self.valve_rate_softmax)  # [batch_size, num_token]
+            valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, num_token, num_label]
+            valve_mask_expanded = valve_mask_expanded.expand(-1, -1, 9)
 
-        sf = gi * valve_mask_expanded
-        enhanced = x + sf
+            sf = gi * valve_mask_expanded.float()
+            enhanced = x + sf
         enhanced = self.dropout(enhanced)
+
         return enhanced
 
 
@@ -132,8 +145,7 @@ class AGNModel(nn.Module):
         # AGN (valve gate)
         self.agn = AGN(feature_size=9,
                        dropout_rate=0.1,
-                       valve_rate=self.config.get('valve_rate', 0.3),
-                       dynamic_valve=self.config.get('use_dynamic_valve', False))
+                       config=config)
 
         self.attn = SelfAttention(9, activation="swish", dropout_rate=config['dropout_rate'],
                                   return_attention=False)
