@@ -93,7 +93,8 @@ class AGN(nn.Module):
         self.valve_rate_softmax = config["valve_rate_softmax"]
         self.dynamic_valve = config["use_dynamic_valve"]
 
-        self.valve_transform = nn.Linear(feature_size, feature_size, bias=False)
+        self.valve_transform = nn.Linear(feature_size, feature_size)
+        self.gi_transform = nn.Linear(feature_size, feature_size)
         self.sigmoid = nn.Sigmoid()
 
         self.use_sigmoid = config["use_sigmoid"]
@@ -112,17 +113,12 @@ class AGN(nn.Module):
             else:
                 valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
                 valve = valve * valve_mask.float()
-            enhanced = x + valve * gi
+            enhanced = x + valve * self.gi_transform(gi)
         else:
-            softmax_output = F.softmax(x, dim=-1)
-            valve, _ = torch.max(softmax_output, dim=-1)  # The max value in each token label vector
-
+            valve = F.softmax(self.valve_transform(x), dim=-1)
             valve_mask = (valve < self.valve_rate_softmax)  # [batch_size, num_token]
-            valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, num_token, num_label]
-            valve_mask_expanded = valve_mask_expanded.expand(-1, -1, 9)
-
-            sf = gi * valve_mask_expanded.float()
-            enhanced = x + sf
+            valve = valve * valve_mask.float()
+            enhanced = x + valve * self.gi_transform(gi)
         enhanced = self.dropout(enhanced)
 
         return enhanced
