@@ -5,9 +5,8 @@ from transformers import BertTokenizer
 from ner_dataloader import NerDataLoader, NerDataset
 from model_AGN import AGNModel, train_agn_model, test_agn_model
 from torch.utils.data import DataLoader
-import logging
 from utils import get_save_dir, set_seed, collate_fn
-
+import logging
 
 def check_device():
     """Check for device"""
@@ -24,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
     parser.add_argument('--ae_epochs', type=int)
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
-    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN.json")
+    parser.add_argument('--config', type=str, default="data/ner/conll2003_bert.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--epochs', type=int)

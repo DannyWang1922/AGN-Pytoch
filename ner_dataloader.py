@@ -146,13 +146,11 @@ class NerDataLoader:
                                                hidden_dim=self.ae_hidden_dim,
                                                activation=nn.ReLU())
                 print("V-net: AE")
-                logging.info("V-net: AE")
             elif self.v_net == "vae":
                 self.autoencoder = VariationalAutoencoder(input_dim=in_dims, latent_dim=self.ae_latent_dim,
                                                           hidden_dim=self.ae_hidden_dim,
                                                           activation=nn.ReLU())
                 print("V-net: VAE")
-                logging.info("V-net: VAE")
             self.autoencoder = self.autoencoder.to(self.device)
 
     def get_tcol_feature(self, data):
@@ -191,7 +189,6 @@ class NerDataLoader:
             token_sfs = self.autoencoder.predict(token_sfs, batch_size=self.batch_size, device=self.device)
         else:
             print("V-net: none")
-            logging.info("V-net: none")
 
         token_sf_dict = {}
         for i, token_id in enumerate(token_ids):
