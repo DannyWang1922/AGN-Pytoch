@@ -70,7 +70,7 @@ class VariationalAutoencoder(nn.Module):
     def predict(self, data, batch_size, device):
         data_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
         self.eval()
-        all_decoded = []
+        all_preds = []
 
         with torch.no_grad():
             for x in data_loader:
@@ -78,10 +78,10 @@ class VariationalAutoencoder(nn.Module):
                 z_mean, z_log_var = self.encode(x)
                 z = self.reparameterize(z_mean, z_log_var)
                 decoded = self.decode(z)
-                all_decoded.append(decoded)
+                all_preds.append(decoded)
 
-        all_decoded = torch.cat(all_decoded, dim=0)
-        return all_decoded
+        all_preds = torch.cat(all_preds, dim=0)
+        return all_preds
 
 
 # AutoEncoder
@@ -144,13 +144,13 @@ class Autoencoder(nn.Module):
     def predict(self, data, batch_size, device):
         data_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
         self.eval()
-        all_decoded = []
+        all_preds = []
 
         with torch.no_grad():
             for x in data_loader:
                 x = x.to(device)
                 decoded = self.forward(x)
-                all_decoded.append(decoded)
+                all_preds.append(decoded)
 
-        all_decoded = torch.cat(all_decoded, dim=0)
-        return all_decoded
+        all_preds = torch.cat(all_preds, dim=0)
+        return all_preds
