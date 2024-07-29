@@ -1,7 +1,7 @@
 {
     "ae_epochs": 1,
-    "ae_hidden_dim": 32,
-    "ae_latent_dim": 16,
+    "ae_hidden_dim": 64,
+    "ae_latent_dim": 256,
     "batch_size": 8,
     "decay_rate": 0.85,
     "decay_steps": 3000,

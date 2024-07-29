@@ -14,12 +14,14 @@ class VariationalAutoencoder(nn.Module):
         self.activation = activation
 
         # encoder
-        self.encoder_linear = nn.Linear(input_dim, hidden_dim)
+        self.encoder_input2hidden = nn.Linear(input_dim, hidden_dim)
         self.z_mean = nn.Linear(hidden_dim, latent_dim)
         self.z_log_var = nn.Linear(hidden_dim, latent_dim)
 
         # decoder
-        self.decoder_linear = nn.Linear(latent_dim, input_dim)
+        self.decoder_latent2hidden = nn.Linear(latent_dim, hidden_dim)
+        self.decoder_hidden2output = nn.Linear(hidden_dim, input_dim)
+
         self.sigmoid = nn.Sigmoid()
 
     def reparameterize(self, z_mean, z_log_var):
@@ -28,13 +30,15 @@ class VariationalAutoencoder(nn.Module):
         return z_mean + epsilon * std
 
     def encode(self, x):
-        h = self.activation(self.encoder_linear(x))
-        z_mean = self.z_mean(h)
-        z_log_var = self.z_log_var(h)
+        hidden = self.activation(self.encoder_input2hidden(x))
+        z_mean = self.z_mean(hidden)
+        z_log_var = self.z_log_var(hidden)
         return z_mean, z_log_var
 
-    def decode(self, encoded):
-        decoded = self.sigmoid(self.decoder_linear(encoded))
+    def decode(self, z):
+        hidden = self.activation(self.decoder_latent2hidden(z))
+        output = self.decoder_hidden2output(hidden)
+        decoded = self.sigmoid(output)
         return decoded
 
     def forward(self, x):
@@ -77,8 +81,7 @@ class VariationalAutoencoder(nn.Module):
                 x = x.to(device)
                 z_mean, z_log_var = self.encode(x)
                 z = self.reparameterize(z_mean, z_log_var)
-                decoded = self.decode(z)
-                all_preds.append(decoded)
+                all_preds.append(z)
 
         all_preds = torch.cat(all_preds, dim=0)
         return all_preds
@@ -97,7 +100,8 @@ class Autoencoder(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             activation,
-            nn.Linear(hidden_dim, latent_dim)
+            nn.Linear(hidden_dim, latent_dim),
+            activation
         )
         # decoder
         self.decoder = nn.Sequential(
@@ -149,8 +153,8 @@ class Autoencoder(nn.Module):
         with torch.no_grad():
             for x in data_loader:
                 x = x.to(device)
-                decoded = self.forward(x)
-                all_preds.append(decoded)
+                z = self.encode(x)
+                all_preds.append(z)
 
         all_preds = torch.cat(all_preds, dim=0)
         return all_preds

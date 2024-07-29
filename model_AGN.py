@@ -97,6 +97,8 @@ class AGN(nn.Module):
         self.gi_transform = nn.Linear(feature_size, feature_size)
         self.sigmoid = nn.Sigmoid()
 
+        self.activation = nn.ReLU()
+
         self.use_sigmoid = config["use_sigmoid"]
 
         # 动态阀门调整
@@ -105,20 +107,20 @@ class AGN(nn.Module):
 
         self.dropout = nn.Dropout(self.dropout_rate)
 
-    def forward(self, x, gi):  # x: bert output; gi: statistical feature
+    def forward(self, bert_hidden, gi_hidden):  # x: bert output; gi: statistical feature
         if self.use_sigmoid:
-            valve = self.sigmoid(self.valve_transform(x))
+            valve = self.sigmoid(bert_hidden)
             if self.dynamic_valve:
                 valve = self.dynamic_valve_layer(valve)
             else:
                 valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
                 valve = valve * valve_mask.float()
-            enhanced = x + valve * self.gi_transform(gi)
         else:
-            valve = F.softmax(self.valve_transform(x), dim=-1)
+            valve = F.softmax(self.valve_transform(bert_hidden), dim=-1)
             valve_mask = (valve < self.valve_rate_softmax)  # [batch_size, num_token]
             valve = valve * valve_mask.float()
-            enhanced = x + valve * self.gi_transform(gi)
+
+        enhanced = bert_hidden + valve * gi_hidden
         enhanced = self.dropout(enhanced)
 
         return enhanced
@@ -129,21 +131,22 @@ class AGNModel(nn.Module):
         super(AGNModel, self).__init__()
         self.config = config
         self.task = config["task"]
+        self.activation = nn.ReLU()
 
         # pretrained bert
         self.bert = BertModel.from_pretrained(config['pretrained_model_dir'])
         bert_output_feature_size = self.bert.config.hidden_size
 
         # GI (statistical feature)
-        self.gi_linear = nn.Linear(self.config["ae_latent_dim"], bert_output_feature_size)
+        self.gi_latent2hidden = nn.Linear(self.config["ae_latent_dim"], config["hidden_size"])
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
         # AGN (valve gate)
-        self.agn = AGN(feature_size=9,
+        self.agn = AGN(feature_size=config["hidden_size"],
                        dropout_rate=0.1,
                        config=config)
 
-        self.attn = SelfAttention(9, activation="swish", dropout_rate=config['dropout_rate'],
+        self.attn = SelfAttention(feature_size=config["hidden_size"], activation="swish", dropout_rate=config['dropout_rate'],
                                   return_attention=False)
 
         if self.task == 'clf':
@@ -157,8 +160,8 @@ class AGNModel(nn.Module):
             )
         elif self.task == 'ner':
             self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
-            self.ner_drop = nn.Dropout(config['dropout_rate'])
-            self.ner_linear = nn.Linear(bert_output_feature_size, config["hidden_size"])
+            self.ner_bert_drop = nn.Dropout(config['dropout_rate'])
+            self.ner_bert2hidden = nn.Linear(bert_output_feature_size, config["hidden_size"])
             self.ner_hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
 
         elif self.task == 'sts':
@@ -175,18 +178,19 @@ class AGNModel(nn.Module):
 
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
+        bert_hidden = self.ner_bert2hidden(bert_last_hidden_state)
 
-        output1 = self.ner_drop(bert_last_hidden_state)
-        output2 = self.ner_linear(output1)
-        token_emb = self.ner_hidden2tag(output2)
+        gi_hidden = self.gi_latent2hidden(gi)
+        gi_hidden = self.gi_dropout(gi_hidden)
 
         if self.config.get('use_agn'):
-            agn_output = self.agn(token_emb, gi)
-            preds = self.attn(agn_output)
-        else:
-            preds = token_emb
+            agn_output = self.agn(bert_hidden, gi_hidden)
+            bert_hidden = self.attn(agn_output)
+        bert_hidden = self.activation(bert_hidden)
 
-        return preds
+        token_emb = self.activation(self.ner_hidden2tag(bert_hidden))
+
+        return token_emb
 
     def loss(self, outputs, targets):
         if self.task == 'clf':
