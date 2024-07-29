@@ -108,17 +108,9 @@ class AGN(nn.Module):
         self.dropout = nn.Dropout(self.dropout_rate)
 
     def forward(self, bert_hidden, gi_hidden):  # x: bert output; gi: statistical feature
-        if self.use_sigmoid:
-            valve = self.sigmoid(bert_hidden)
-            if self.dynamic_valve:
-                valve = self.dynamic_valve_layer(valve)
-            else:
-                valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
-                valve = valve * valve_mask.float()
-        else:
-            valve = F.softmax(self.valve_transform(bert_hidden), dim=-1)
-            valve_mask = (valve < self.valve_rate_softmax)  # [batch_size, num_token]
-            valve = valve * valve_mask.float()
+        valve = self.sigmoid(bert_hidden)
+        valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
+        valve = valve * valve_mask.float()
 
         enhanced = bert_hidden + valve * gi_hidden
         enhanced = self.dropout(enhanced)
@@ -146,7 +138,8 @@ class AGNModel(nn.Module):
                        dropout_rate=0.1,
                        config=config)
 
-        self.attn = SelfAttention(feature_size=config["hidden_size"], activation="swish", dropout_rate=config['dropout_rate'],
+        self.attn = SelfAttention(feature_size=config["hidden_size"], activation="swish",
+                                  dropout_rate=config['dropout_rate'],
                                   return_attention=False)
 
         if self.task == 'clf':
