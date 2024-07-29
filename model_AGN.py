@@ -94,7 +94,6 @@ class AGN(nn.Module):
         self.dynamic_valve = config["use_dynamic_valve"]
 
         self.valve_transform = nn.Linear(feature_size, feature_size)
-        self.gi_transform = nn.Linear(feature_size, feature_size)
         self.sigmoid = nn.Sigmoid()
 
         self.activation = nn.ReLU()
@@ -107,12 +106,19 @@ class AGN(nn.Module):
 
         self.dropout = nn.Dropout(self.dropout_rate)
 
-    def forward(self, bert_hidden, gi_hidden):  # x: bert output; gi: statistical feature
-        valve = self.sigmoid(bert_hidden)
-        valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
-        valve = valve * valve_mask.float()
+    def forward(self, x, gi):  # x: bert output; gi: statistical feature
+        if self.use_sigmoid:
+            valve = self.sigmoid(self.valve_transform(x))
+            valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
+            valve = valve * valve_mask.float()
+        else:
+            softmax_output = F.softmax(x, dim=-1)  # [batch_size, sentence_length, num_label]
+            valve, _ = torch.max(softmax_output, dim=-1)  # [batch_size, sentence_length]
+            valve_mask = (valve < self.valve_rate_softmax)
+            valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, sentence_length, 1]
+            valve = valve_mask_expanded.expand(-1, -1, 9)  # [batch_size, sentence_length, num_label]
 
-        enhanced = bert_hidden + valve * gi_hidden
+        enhanced = x + valve * gi
         enhanced = self.dropout(enhanced)
 
         return enhanced
@@ -130,15 +136,14 @@ class AGNModel(nn.Module):
         bert_output_feature_size = self.bert.config.hidden_size
 
         # GI (statistical feature)
-        self.gi_latent2hidden = nn.Linear(self.config["ae_latent_dim"], config["hidden_size"])
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
         # AGN (valve gate)
-        self.agn = AGN(feature_size=config["hidden_size"],
+        self.agn = AGN(feature_size=9,
                        dropout_rate=0.1,
                        config=config)
 
-        self.attn = SelfAttention(feature_size=config["hidden_size"], activation="swish",
+        self.attn = SelfAttention(feature_size=9, activation="swish",
                                   dropout_rate=config['dropout_rate'],
                                   return_attention=False)
 
@@ -171,17 +176,16 @@ class AGNModel(nn.Module):
 
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
-        bert_hidden = self.ner_bert2hidden(bert_last_hidden_state)
+        bert_hidden = self.activation(self.ner_bert2hidden(bert_last_hidden_state))
+        bert_tag = self.activation(self.ner_hidden2tag(bert_hidden))
 
-        gi_hidden = self.gi_latent2hidden(gi)
-        gi_hidden = self.gi_dropout(gi_hidden)
+        gi_tag = self.gi_dropout(gi)
 
         if self.config.get('use_agn'):
-            agn_output = self.agn(bert_hidden, gi_hidden)
-            bert_hidden = self.attn(agn_output)
-        bert_hidden = self.activation(bert_hidden)
-
-        token_emb = self.activation(self.ner_hidden2tag(bert_hidden))
+            agn_output = self.agn(bert_tag, gi_tag)
+            token_emb = self.attn(agn_output)
+        else:
+            token_emb = bert_tag
 
         return token_emb
 

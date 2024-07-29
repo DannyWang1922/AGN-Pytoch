@@ -199,7 +199,7 @@ class NerDataLoader:
             sentence_sf = []
             for token_id in token_ids:
                 if token_id in [101, 102]:
-                    sentence_sf.append([0] * self.ae_latent_dim)
+                    sentence_sf.append([0] * 9)
                 else:
                     token_sf_vector = token_sf_dict.get(token_id)
                     sentence_sf.append(token_sf_vector.tolist())

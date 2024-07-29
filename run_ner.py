@@ -23,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description='AGN-Plus Configuration')
     parser.add_argument('--ae_epochs', type=int)
     parser.add_argument('--batch_size', type=int, help='Batch size parameter')
-    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN_vae_sigmoid.json")
+    parser.add_argument('--config', type=str, default="data/ner/conll2003_AGN_vae_softmax.json")
     parser.add_argument('--decay_steps', type=int, help='Decay steps parameter')
     parser.add_argument('--decay_rate', type=float, help='Decay rate parameter')
     parser.add_argument('--epochs', type=int)

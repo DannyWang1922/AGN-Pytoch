@@ -81,7 +81,8 @@ class VariationalAutoencoder(nn.Module):
                 x = x.to(device)
                 z_mean, z_log_var = self.encode(x)
                 z = self.reparameterize(z_mean, z_log_var)
-                all_preds.append(z)
+                decoded = self.decode(z)
+                all_preds.append(decoded)
 
         all_preds = torch.cat(all_preds, dim=0)
         return all_preds
@@ -154,7 +155,8 @@ class Autoencoder(nn.Module):
             for x in data_loader:
                 x = x.to(device)
                 z = self.encode(x)
-                all_preds.append(z)
+                decode = self.decode(z)
+                all_preds.append(decode)
 
         all_preds = torch.cat(all_preds, dim=0)
         return all_preds
