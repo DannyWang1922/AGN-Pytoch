@@ -1,3 +1,5 @@
+import logging
+
 import torch.nn as nn
 from torch import optim
 import torch
@@ -68,6 +70,7 @@ class VariationalAutoencoder(nn.Module):
                 loss.backward()
                 optimizer.step()
             print(f"\tEpoch {epoch + 1}, Loss: {loss.item()}")
+            logging.info(f"\tEpoch {epoch + 1}, Loss: {loss.item()}")
         print("VAE Encoder training finish.")
         print()
 
@@ -131,6 +134,7 @@ class Autoencoder(nn.Module):
 
     def trainEncoder(self, data, batch_size, epochs, device):
         print("Begin training autoencoder")
+        logging.info("Begin training autoencoder.\n")
         optimizer = optim.Adam(self.parameters(), lr=1e-5)
         data_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
         self.train()
@@ -143,7 +147,9 @@ class Autoencoder(nn.Module):
                 loss.backward()
                 optimizer.step()
             print(f"\tEpoch {epoch + 1}, Loss: {loss.item()}")
+            logging.info(f"\tEpoch {epoch + 1}, Loss: {loss.item()}")
         print("Autoencoder training finish.")
+        logging.info("Autoencoder training finish.\n")
         print()
 
     def predict(self, data, batch_size, device):
