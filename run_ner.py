@@ -60,6 +60,14 @@ def main():
     config["task"] = "ner"
     config['save_dir'] = get_save_dir(config['save_dir'])
 
+    logging.basicConfig(
+        filename=config["save_dir"] + '/ner_results.log',
+        level=logging.INFO,
+        format=' %(message)s',
+        filemode='w',
+    )
+    logging.info("Config: \n" + str(formatted_json) + "\n")
+
     # Load tokenizer
     tokenizer = BertTokenizer.from_pretrained(config['pretrained_model_dir'], do_lower_case=True)
     tokenizer.model_max_length = config['max_len']
@@ -74,13 +82,6 @@ def main():
     print()
 
     set_seed(config["random_seed"])
-    logging.basicConfig(
-        filename=config["save_dir"] + '/ner_results.log',
-        level=logging.INFO,
-        format=' %(message)s',
-        filemode='w',
-    )
-    logging.info("Config: \n" + str(formatted_json) + "\n")
 
     print("Begin training AGN")
     accuracy_list = []
