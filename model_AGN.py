@@ -94,6 +94,7 @@ class AGN(nn.Module):
         self.dynamic_valve = config["use_dynamic_valve"]
 
         self.valve_transform = nn.Linear(feature_size, feature_size)
+        self.gi_transform = nn.Linear(feature_size, feature_size)
         self.sigmoid = nn.Sigmoid()
 
         self.activation = nn.ReLU()
@@ -108,7 +109,7 @@ class AGN(nn.Module):
 
     def forward(self, x, gi):  # x: bert output; gi: statistical feature
         if self.use_sigmoid:
-            valve = self.sigmoid(self.valve_transform(x))
+            valve = self.sigmoid(x)
             valve_mask = (valve > 0.5 - self.valve_rate_sigmoid) & (valve < 0.5 + self.valve_rate_sigmoid)
             valve = valve * valve_mask.float()
         else:
@@ -136,6 +137,7 @@ class AGNModel(nn.Module):
         bert_output_feature_size = self.bert.config.hidden_size
 
         # GI (statistical feature)
+        self.gi_latent2hidden = nn.Linear(9, 9)
         self.gi_dropout = nn.Dropout(self.config.get('dropout_rate', 0.1))
 
         # AGN (valve gate)
@@ -177,9 +179,12 @@ class AGNModel(nn.Module):
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
         bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
         bert_hidden = self.activation(self.ner_bert2hidden(bert_last_hidden_state))
-        bert_tag = self.activation(self.ner_hidden2tag(bert_hidden))
 
-        gi_tag = self.gi_dropout(gi)
+        gi_hidden = self.activation(self.gi_latent2hidden(gi))
+        gi_hidden = self.gi_dropout(gi_hidden)
+
+        bert_tag = self.activation(self.ner_hidden2tag(bert_hidden))
+        gi_tag = gi_hidden
 
         if self.config.get('use_agn'):
             agn_output = self.agn(bert_tag, gi_tag)
