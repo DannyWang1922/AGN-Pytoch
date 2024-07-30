@@ -10,8 +10,7 @@ import os
 
 config_list = ["data/ner/conll2003_bert.json",
                "data/ner/conll2003_AGN_ae_sigmoid.json",
-               "data/ner/conll2003_AGN_vae_sigmoid.json",
-               "data/ner/conll2003_AGN_none_sigmoid.json"]
+               "data/ner/conll2003_AGN_vae_sigmoid.json"]
 for i in config_list:
 
     print("=================================================================")
