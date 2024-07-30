@@ -186,9 +186,9 @@ class AGNModel(nn.Module):
         if self.config.get('use_agn'):
             agn_output = self.agn(bert_hidden, gi_hidden)
             bert_hidden = self.attn(agn_output)
-        bert_hidden = self.activation(bert_hidden)
 
-        token_emb = self.activation(self.ner_hidden2tag(bert_hidden))
+        bert_hidden = self.activation(bert_hidden)
+        token_emb = self.ner_hidden2tag(bert_hidden)
 
         return token_emb
 
