@@ -134,7 +134,7 @@ class Autoencoder(nn.Module):
 
     def trainEncoder(self, data, batch_size, epochs, device):
         print("Begin training autoencoder")
-        logging.info("Begin training autoencoder.\n")
+        logging.info("Begin training autoencoder.")
         optimizer = optim.Adam(self.parameters(), lr=1e-5)
         data_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
         self.train()
