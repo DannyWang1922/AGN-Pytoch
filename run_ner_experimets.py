@@ -1,20 +1,31 @@
 import os
 
-config_list = ["data/ner/conll2003_bert.json",
-               "data/ner/conll2003_AGN_ae_sigmoid.json",
-               "data/ner/conll2003_AGN_vae_sigmoid.json",
-               "data/ner/conll2003_AGN_none_sigmoid.json",
-               "data/ner/conll2003_AGN_ae_softmax.json",
-               "data/ner/conll2003_AGN_vae_softmax.json",
-               "data/ner/conll2003_AGN_none_softmax.json"]
+# config_list = [
+#                "data/ner/conll2003_AGN_ae_sigmoid.json",
+#                "data/ner/conll2003_AGN_vae_sigmoid.json",
+#                "data/ner/conll2003_AGN_none_sigmoid.json",
+#                "data/ner/conll2003_AGN_ae_softmax.json",
+#                "data/ner/conll2003_AGN_none_softmax.json"]
 
+config1 = "data/ner/conll2003_AGN_none_softmax.json"
+config2 = "data/ner/conll2003_AGN_ae_softmax.json"
+config3 = "data/ner/conll2003_AGN_vae_sigmoid.json"
+config = config1
 
-for i in config_list:
-
+# 循环从0到1.0，每个间隔为0.1
+for i in range(0, 10):
+    valve_rate = i * 0.1
     print("=================================================================")
-    print(f"Running experiment with config={i}")
-    os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {i} ")
+    print(f"Running experiment with config={config}")
+    os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {config} --valve_rate_sigmoid {valve_rate} --valve_rate_softmax {valve_rate}")
     print()
+
+
+# for i in config_list:
+#     print("=================================================================")
+#     print(f"Running experiment with config={i}")
+#     os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {i} ")
+#     print()
 
 # # 循环从0到1.0，每个间隔为0.1
 # for i in range(0, 55, 5):
