@@ -8,15 +8,15 @@ import os
 #                "data/ner/conll2003_AGN_vae_softmax.json",
 #                "data/ner/conll2003_AGN_none_softmax.json"]
 
-config_list = ["data/ner/conll2003_bert.json",
-               "data/ner/conll2003_AGN_ae_sigmoid.json",
+config_list = ["data/ner/conll2003_AGN_ae_sigmoid.json",
                "data/ner/conll2003_AGN_vae_sigmoid.json"]
-for i in config_list:
-
-    print("=================================================================")
-    print(f"Running experiment with config={i}")
-    os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {i} ")
-    print()
+for config in config_list:
+    for valve in range(0, 55, 5):
+        valve_rate = valve * 0.01
+        print("=================================================================")
+        print(f"Running experiment with config={config} with valve_rate_sigmoid={valve_rate}")
+        os.system(f"python run_ner.py --ae_epochs 1 --epochs 1 --config {config} --valve_rate_sigmoid {valve_rate} ")
+        print()
 
 # # 循环从0到1.0，每个间隔为0.1
 # for i in range(0, 55, 5):
