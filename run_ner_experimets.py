@@ -16,7 +16,7 @@ config = config1
 for i in range(0, 10):
     valve_rate = i * 0.1
     print("=================================================================")
-    print(f"Running experiment with config={config}")
+    print(f"Running experiment with config={config}, valve_rate {valve_rate}")
     os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {config} --valve_rate_sigmoid {valve_rate} --valve_rate_softmax {valve_rate}")
     print()
 
