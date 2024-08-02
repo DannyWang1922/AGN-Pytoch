@@ -14,10 +14,6 @@ class BiLSTM_CRF(nn.Module):
         self.hidden2tag = nn.Linear(hidden_dim, tagset_size)
         self.crf = CRF(tagset_size, batch_first=True)
 
-        # 参数初始化
-        nn.init.xavier_uniform_(self.hidden2tag.weight)
-        nn.init.zeros_(self.hidden2tag.bias)
-
     def forward(self, sentences):
         embeds = self.embedding(sentences)
         lstm_out, _ = self.lstm(embeds)
@@ -61,7 +57,7 @@ tags = torch.randint(0, tagset_size, (32, 10))  # 示例标签
 mask = torch.ones((32, 10), dtype=torch.bool)  # 掩码
 
 # 训练循环
-for epoch in range(100):
+for epoch in range(1):
     model.train()
     optimizer.zero_grad()
     emissions = model(sentences)
