@@ -16,4 +16,4 @@ for seed in seed_list:
         for lr in learning_rate_list:
             print("=================================================================")
             print(f"Running experiment with seed={seed}, bs={bs}, lr={lr}")
-            os.system(f"python run_ner.py --ae_epochs 1 --epochs 1 --config data/ner/conll2003_bert.json --batch_size {bs} --learning_rate {lr} --random_seed {seed}")
+            os.system(f"python run_ner.py --ae_epochs 1 --epochs 10 --config data/ner/conll2003_bert.json --batch_size {bs} --learning_rate {lr} --random_seed {seed}")
