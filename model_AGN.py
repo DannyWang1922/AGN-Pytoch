@@ -120,7 +120,7 @@ class AGN(nn.Module):
             valve_mask_expanded = valve_mask.unsqueeze(-1)  # [batch_size, sentence_length, 1]
             valve = valve_mask_expanded.expand(-1, -1, 9)  # [batch_size, sentence_length, num_label]
 
-        enhanced = x + valve * gi
+        enhanced = self.activation(x + valve * gi)
         enhanced = self.dropout(enhanced)
 
         return enhanced
@@ -161,7 +161,6 @@ class AGNModel(nn.Module):
             )
         elif self.task == 'ner':
             self.ner_bert_drop = nn.Dropout(config['dropout_rate'])
-
             self.lstm = nn.LSTM(bert_output_feature_size, config["hidden_size"] // 2, num_layers=2, bidirectional=True)
             self.hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
             self.crf = CRF(config["label_size"], batch_first=True)

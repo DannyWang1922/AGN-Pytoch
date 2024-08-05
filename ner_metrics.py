@@ -49,7 +49,6 @@ class NerMetrics:
                     y_true.append([self.id2label[label] for label in masked_true_labels])
                     y_pred.append([self.id2label[label] for label in masked_preds])
 
-
         # 计算并打印评估指标
         acc = round(accuracy_score(y_true, y_pred), 4)
         precision = round(precision_score(y_true, y_pred), 4)
