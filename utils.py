@@ -179,7 +179,7 @@ def collate_fn(batch):
                                                       batch_first=True, padding_value=0)
     batch_segment_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_segment_ids, batch_first=True, padding_value=0)
     batch_sf_padded = torch.nn.utils.rnn.pad_sequence(batch_sf, batch_first=True, padding_value=0)
-    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
+    batch_label_ids_padded = torch.nn.utils.rnn.pad_sequence(batch_label_ids, batch_first=True, padding_value=-1)
 
     return {
         'token_ids': batch_token_ids_padded,
@@ -188,3 +188,30 @@ def collate_fn(batch):
         'attention_mask': attention_masks,
         'label_ids': batch_label_ids_padded
     }
+
+
+def remove_cls_token(emissions, labels):
+    # Iterate over each batch to remove [CLS] and [SEP]
+    new_emissions_list = []
+    new_labels_list = []
+
+    for i in range(emissions.size(0)):
+        # Find the indices of the first and last 1 in the attention mask
+        token_101_idx = (labels[i] == -1).nonzero()[0].item()
+        token_102_idx = (labels[i] == -1).nonzero()[1].item()
+
+        # Remove the first and last tokens (corresponding to [CLS] and [SEP])
+        new_emissions = torch.cat((emissions[i][:token_101_idx], emissions[i][token_101_idx + 1:token_102_idx],
+                                   emissions[i][token_102_idx + 1:]), dim=0)
+        new_labels = torch.cat(
+            (labels[i][:token_101_idx], labels[i][token_101_idx + 1:token_102_idx], labels[i][token_102_idx + 1:]),
+            dim=0)
+
+        new_emissions_list.append(new_emissions)
+        new_labels_list.append(new_labels)
+
+    # Stack the lists back into tensors
+    new_emissions = torch.stack(new_emissions_list)
+    new_labels = torch.stack(new_labels_list)
+
+    return new_emissions, new_labels

@@ -1,7 +1,7 @@
 {
     "ae_epochs": 1,
-    "ae_hidden_dim": 16,
-    "ae_latent_dim": 32,
+    "ae_hidden_dim": 8,
+    "ae_latent_dim": 4,
     "batch_size": 8,
     "decay_rate": 0.85,
     "decay_steps": 3000,
@@ -14,7 +14,7 @@
     "max_len": 128,
     "patience": 30,
     "pretrained_model_dir": "bert-base-uncased",
-    "save_dir": "ckpts/exp2.3/conll03_bert",
+    "save_dir": "ckpts/exp3.3/conll03_bert",
     "random_seed": 42,
     "test_path": "data/ner/test.json",
     "train_path": "data/ner/train.json",

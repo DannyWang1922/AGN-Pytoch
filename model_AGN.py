@@ -237,7 +237,10 @@ def train_agn_model(model, train_loader, evl_loader, config):
             optimizer.zero_grad()
             preds = model(inputs)
 
-            loss = model.loss(preds, labels)
+            preds, labels = remove_cls_token(preds, labels)  # remove token 101 102
+            attention_mask = (labels != -1).bool()
+
+            loss = model.loss(preds, labels, attention_mask)
 
             loss.backward()
             optimizer.step()

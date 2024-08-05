@@ -43,11 +43,11 @@ class NerDataset(Dataset):
 def generate_token_tcol_vectors(all_tokens, all_labels):
     # 提取所有可能的标签
     possible_labels = set(label for labels in all_labels for label in labels if
-                          label not in [-100])  # Remove padding label
+                          label not in [-1])  # Remove padding label
     token_label_counts = defaultdict(lambda: defaultdict(int))
     num_labels = len(possible_labels)
 
-    # 扁平化token和标签列表，忽略101、102和-100
+    # 扁平化token和标签列表，忽略101、102和 -10
     tokens = [word_token for sentence_token in all_tokens for word_token in sentence_token if
               word_token not in [101, 102]]
     labels = [word_label for sentence_token in all_labels for word_label in sentence_token if

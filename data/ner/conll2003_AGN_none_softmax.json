@@ -14,7 +14,7 @@
     "max_len": 128,
     "patience": 30,
     "pretrained_model_dir": "bert-base-uncased",
-    "save_dir": "ckpts/exp2.3/conll03_AGN_none_softmax",
+    "save_dir": "ckpts/exp3.3/conll03_AGN_none_softmax",
     "random_seed": 42,
     "test_path": "data/ner/test.json",
     "train_path": "data/ner/train.json",
