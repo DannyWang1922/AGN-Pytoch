@@ -41,15 +41,14 @@ class NerMetrics:
                 outputs, true_labels = remove_cls_token(outputs, true_labels)
                 attention_mask = (true_labels != -1).bool()
                 preds = self.model.predict(outputs, attention_mask.bool())
-                preds = [item for sublist in preds for item in sublist]  # change preds form 2d to 1d
-
-                true_label_mask = true_labels != -1  # remove -1 in true_labels
-                true_labels = true_labels[true_label_mask]
-                true_labels = true_labels.tolist()
 
                 for i in range(len(true_labels)):
-                    y_true.append([self.id2label[label] for label in true_labels])  # remove true label padding
-                    y_pred.append([self.id2label[label] for label in preds])
+                    # Apply mask to remove -1 padded true labels and corresponding predictions
+                    masked_true_labels = true_labels[i][true_labels[i] != -1].cpu().numpy().tolist()
+                    masked_preds = preds[i]
+                    y_true.append([self.id2label[label] for label in masked_true_labels])
+                    y_pred.append([self.id2label[label] for label in masked_preds])
+
 
         # 计算并打印评估指标
         acc = round(accuracy_score(y_true, y_pred), 4)
