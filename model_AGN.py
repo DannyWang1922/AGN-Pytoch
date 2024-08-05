@@ -11,7 +11,8 @@ import torch.nn.functional as F
 import torch
 from clf_metrics import ClfMetrics
 from ner_metrics import NerMetrics
-from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device, set_seed
+from utils import GlobalMaxPool1D, ConditionalLayerNormalization, Swish, move_to_device, set_seed, remove_cls_token
+from torchcrf import CRF
 
 
 class SelfAttention(nn.Module):
@@ -159,10 +160,11 @@ class AGNModel(nn.Module):
                 nn.Softmax(dim=-1)
             )
         elif self.task == 'ner':
-            self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
             self.ner_bert_drop = nn.Dropout(config['dropout_rate'])
-            self.ner_bert2hidden = nn.Linear(bert_output_feature_size, config["hidden_size"])
-            self.ner_hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
+
+            self.lstm = nn.LSTM(bert_output_feature_size, config["hidden_size"] // 2, num_layers=2, bidirectional=True)
+            self.hidden2tag = nn.Linear(config["hidden_size"], config["label_size"])
+            self.crf = CRF(config["label_size"], batch_first=True)
 
         elif self.task == 'sts':
             # 定义回归或其他输出层
@@ -177,32 +179,27 @@ class AGNModel(nn.Module):
                 "sf_vector"], input["attention_mask"]
 
         bert_output = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
-        bert_last_hidden_state = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
-        bert_hidden = self.activation(self.ner_bert2hidden(bert_last_hidden_state))
-
-        gi_hidden = self.activation(self.gi_latent2hidden(gi))
-        gi_hidden = self.gi_dropout(gi_hidden)
-
-        bert_tag = self.activation(self.ner_hidden2tag(bert_hidden))
-        gi_tag = gi_hidden
+        bert_hidden = bert_output.last_hidden_state  # torch.Size([64, 65, 768])
+        lstm_out, _ = self.lstm(bert_hidden)
+        bert_tag = self.hidden2tag(lstm_out)
 
         if self.config.get('use_agn'):
-            agn_output = self.agn(bert_tag, gi_tag)
+            agn_output = self.agn(bert_tag, gi)
             token_emb = self.attn(agn_output)
         else:
             token_emb = bert_tag
 
         return token_emb
 
-    def loss(self, outputs, targets):
+    def loss(self, outputs, labels, attention_mask):
         if self.task == 'clf':
-            loss = self.loss_fn(outputs, targets)
+            loss = self.loss_fn(outputs, labels)
         elif self.task == "ner":
-            active_loss = targets.view(-1) != -100  # 找到有效的标签
-            active_logits = outputs.view(-1, outputs.shape[-1])[active_loss]
-            active_labels = targets.view(-1)[active_loss]
-            loss = self.loss_fn(active_logits, active_labels)
+            loss = -self.crf(outputs, labels, mask=attention_mask)
         return loss
+
+    def predict(self, emissions, mask):
+        return self.crf.decode(emissions, mask=mask)
 
 
 def update_learning_rate(optimizer, decay_rate):
@@ -307,7 +304,7 @@ def test_agn_model(model_class, test_loader, config):
 
             if config["task"] == "ner":
                 for i in range(len(labels)):
-                    masked_true_labels = labels[i][labels[i] != -100].cpu().numpy()
+                    masked_true_labels = labels[i][labels[i] != -1].cpu().numpy()
                     y_true.extend(masked_true_labels)
                     y_pred.extend(preds[i])
             else:

@@ -51,7 +51,7 @@ def generate_token_tcol_vectors(all_tokens, all_labels):
     tokens = [word_token for sentence_token in all_tokens for word_token in sentence_token if
               word_token not in [101, 102]]
     labels = [word_label for sentence_token in all_labels for word_label in sentence_token if
-              word_label not in [-100]]
+              word_label not in [-1]]
 
     # 统计每个token对应的标签频率
     for token, label in zip(tokens, labels):
@@ -223,7 +223,7 @@ class NerDataLoader:
                 token_ids.extend(tok["input_ids"][1:-1])
                 tag_ids.extend([tag] * len(tok["input_ids"][1:-1]))
             token_ids = [first] + token_ids[:self.max_len - 2] + [last]
-            tag_ids = [-100] + tag_ids[:self.max_len - 2] + [-100]
+            tag_ids = [-1] + tag_ids[:self.max_len - 2] + [-1]
             assert len(token_ids) == len(tag_ids)
             data.append({
                 'raw_text': raw_text,
