@@ -2,6 +2,8 @@ import logging
 from collections import defaultdict
 import torch
 from sklearn.preprocessing import MultiLabelBinarizer
+from tqdm import tqdm
+
 from utils import move_to_device, remove_cls_token
 from seqeval.metrics import accuracy_score, precision_score, recall_score, f1_score
 import torch.nn.functional as F
@@ -31,7 +33,7 @@ class NerMetrics:
         self.model.eval()
         y_pred, y_true = [], []
         with torch.no_grad():
-            for data in self.eval_data_loader:
+            for data in tqdm(self.eval_data_loader, desc="Evaluating"):
                 data = move_to_device(data, self.device)
                 inputs, true_labels = data, data["label_ids"]
                 outputs = self.model(inputs)
