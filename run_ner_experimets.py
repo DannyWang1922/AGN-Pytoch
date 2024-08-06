@@ -9,12 +9,19 @@ config_list = ["data/ner/conll2003_bert.json",
                "data/ner/conll2003_AGN_none_softmax.json"]
 
 
-for i in config_list:
+# for config in config_list:
+#
+#     print("=================================================================")
+#     print(f"Running experiment with config={config}")
+#     os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {config} ")
+#     print()
 
+config = "data/ner/conll2003_AGN_none_softmax.json"
+seed_list = [12, 37, 52, 67, 80]
+for i in seed_list:
     print("=================================================================")
-    print(f"Running experiment with config={i}")
-    os.system(f"python run_ner.py --ae_epochs 100 --epochs 100 --config {i} ")
-    print()
+    print(f"Running experiment with seed={i}")
+    os.system(f"python run_ner.py --ae_epochs 1 --epochs 100 --random_seed {i} --config {config}")
 
 # # 循环从0到1.0，每个间隔为0.1
 # for i in range(0, 55, 5):
