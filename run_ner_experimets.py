@@ -17,15 +17,17 @@ config_list = ["data/ner/conll2003_bert.json",
 #     print()
 
 config = "data/ner/conll2003_AGN_none_softmax.json"
-seed_list = [37, 42, 52, 67, 80]
-for i in seed_list:
-    print("=================================================================")
-    print(f"Running experiment with seed={i}")
-    os.system(f"python run_ner.py --ae_epochs 1 --epochs 100 --random_seed {i} --config {config}")
+seed_list = [37, 42]
+for seed in seed_list:
+    for valve_rate in range(1, 11):
+        valve_rate = valve_rate * 0.1
+        print("=================================================================")
+        print(f"Running experiment with seed={seed}, valve_rate={valve_rate}")
+        os.system(f"python run_ner.py --ae_epochs 1 --epochs 100 --random_seed {seed} --valve_rate {valve_rate} --config {config}")
 
 # # 循环从0到1.0，每个间隔为0.1
-# for i in range(0, 55, 5):
-#     valve_rate = i * 0.01
+# for valve_rate in range(1, 11):
+#     valve_rate = valve_rate * 0.1
 #     print()
 #     print("=================================================================")
 #     print(f"Running experiment with valve_rate={valve_rate}")
