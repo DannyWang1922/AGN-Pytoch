@@ -23,7 +23,7 @@ for seed in seed_list:
         valve_rate = valve_rate * 0.1
         print("=================================================================")
         print(f"Running experiment with seed={seed}, valve_rate={valve_rate}")
-        os.system(f"python run_ner.py --ae_epochs 1 --epochs 100 --random_seed {seed} --valve_rate {valve_rate} --config {config}")
+        os.system(f"python run_ner.py --ae_epochs 1 --epochs 100 --random_seed {seed} --valve_rate_softmax {valve_rate} --config {config}")
 
 # # 循环从0到1.0，每个间隔为0.1
 # for valve_rate in range(1, 11):
