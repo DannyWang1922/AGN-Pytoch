@@ -17,7 +17,7 @@ config_list = ["data/ner/conll2003_bert.json",
 #     print()
 
 config = "data/ner/conll2003_AGN_none_softmax.json"
-seed_list = [12, 37, 52, 67, 80]
+seed_list = [37, 42, 52, 67, 80]
 for i in seed_list:
     print("=================================================================")
     print(f"Running experiment with seed={i}")
